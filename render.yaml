@@ -1,0 +1,14 @@
+# Render blueprint: one web service serves the API and the built client.
+services:
+  - type: web
+    name: flowalyst
+    runtime: node
+    plan: free
+    buildCommand: npm install --prefix server && npm install --prefix client && npm run build --prefix server && npm run build --prefix client
+    startCommand: npm start --prefix server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: GEMINI_API_KEY
+        sync: false # set in the Render dashboard; without it the app runs in manual SQL mode

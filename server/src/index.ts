@@ -1,6 +1,8 @@
 import express from "express";
 import multer from "multer";
+import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PORT, UPLOADS_DIR, hasApiKey, provider } from "./config.js";
 import { ensureDirs, registerSeeds, listDatasets, getDataset, registerDataset } from "./datasets.js";
 import { describeDataset, describeWorkspace, queryWorkspace, type TableSource } from "./db.js";
@@ -121,6 +123,14 @@ app.post("/api/ask", async (req, res) => {
   emit({ type: "done" });
   res.end();
 });
+
+// Production: serve the built client from the same service (single deploy).
+// Resolves to <repo>/client/dist from both src/ (tsx dev) and dist/ (compiled).
+const CLIENT_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");
+if (fs.existsSync(CLIENT_DIST)) {
+  app.use(express.static(CLIENT_DIST));
+  app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(CLIENT_DIST, "index.html")));
+}
 
 app.listen(PORT, () => {
   console.log(`Flowalyst server listening on http://localhost:${PORT} (agent: ${provider() ?? "off — manual SQL only"})`);
