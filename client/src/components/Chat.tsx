@@ -1,8 +1,42 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, QueryResult, TraceStep } from "../types";
 import { ask, runSql, type Exchange } from "../lib/api";
 import { ResultTable } from "./ResultTable";
 import { ResultChart } from "./ResultChart";
+
+// Conversations survive reloads: persisted per dataset in localStorage,
+// capped so big result tables can't blow the ~5MB storage quota.
+const STORAGE_PREFIX = "flowalyst-chat-";
+const MAX_STORED_MESSAGES = 30;
+const MAX_STORED_ROWS = 200;
+
+function loadMessages(datasetId: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_PREFIX + datasetId);
+    if (!raw) return [];
+    // A reload can never resurrect an in-flight request.
+    return (JSON.parse(raw) as ChatMessage[]).map((m) => ({ ...m, pending: false }));
+  } catch {
+    return [];
+  }
+}
+
+function saveMessages(datasetId: string, messages: ChatMessage[]) {
+  try {
+    if (messages.length === 0) {
+      localStorage.removeItem(STORAGE_PREFIX + datasetId);
+      return;
+    }
+    const slim = messages.slice(-MAX_STORED_MESSAGES).map((m) =>
+      m.result && m.result.rows.length > MAX_STORED_ROWS
+        ? { ...m, result: { ...m.result, rows: m.result.rows.slice(0, MAX_STORED_ROWS) } }
+        : m,
+    );
+    localStorage.setItem(STORAGE_PREFIX + datasetId, JSON.stringify(slim));
+  } catch {
+    /* storage full or unavailable — the chat just won't survive a reload */
+  }
+}
 
 function TraceCard({ step, index }: { step: TraceStep; index: number }) {
   return (
@@ -76,10 +110,21 @@ function Message({ m }: { m: ChatMessage }) {
 }
 
 export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: boolean }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(datasetId));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Skip mid-stream saves (a write per token delta); the final state is
+    // saved when the last message settles to pending: false.
+    if (messages[messages.length - 1]?.pending) return;
+    saveMessages(datasetId, messages);
+  }, [datasetId, messages]);
+
+  function clearChat() {
+    setMessages([]); // the save effect removes the stored copy
+  }
 
   const scroll = () => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
 
@@ -171,6 +216,15 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
       </div>
       <div className="border-t border-zinc-800 p-3">
         <div className="flex gap-2">
+          {messages.length > 0 && !busy && (
+            <button
+              onClick={clearChat}
+              title="Clear conversation"
+              className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"
+            >
+              clear
+            </button>
+          )}
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
