@@ -1,0 +1,47 @@
+[
+  {
+    "question": "Which platform has the highest average daily screen time?",
+    "answer_regex": "tiktok",
+    "concept": "GROUP BY + ORDER BY"
+  },
+  {
+    "question": "How many students are in this dataset?",
+    "answer_regex": "\\b40\\b|\\bforty\\b",
+    "concept": "COUNT"
+  },
+  {
+    "question": "What is the average GPA of graduate students?",
+    "answer_regex": "8\\.39|8\\.4",
+    "concept": "filtered aggregate"
+  },
+  {
+    "question": "Which country has the highest average mental health score?",
+    "answer_regex": "canada",
+    "concept": "GROUP BY + ranking"
+  },
+  {
+    "question": "Is the correlation between daily screen time and GPA positive or negative?",
+    "answer_regex": "negative",
+    "concept": "CORR"
+  },
+  {
+    "question": "Which gender sleeps more on average?",
+    "answer_regex": "\\bmales?\\b|\\bmen\\b",
+    "concept": "GROUP BY comparison"
+  },
+  {
+    "question": "How many different countries are represented in the data?",
+    "answer_regex": "\\b6\\b|\\bsix\\b",
+    "concept": "COUNT DISTINCT"
+  },
+  {
+    "question": "Split students into heavy users (over 6 hours of screen time) and light users (under 4 hours) and compare their average GPA.",
+    "answer_regex": "heavy",
+    "concept": "CASE WHEN bucketing"
+  },
+  {
+    "question": "What is the average family income of these students?",
+    "answer_regex": "not|cannot|unable|doesn'?t|no such|isn'?t|does not",
+    "concept": "honesty — column doesn't exist"
+  }
+]

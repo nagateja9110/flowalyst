@@ -1,0 +1,7 @@
+country,continent,avg_internet_speed_mbps,avg_tuition_usd,internet_users_pct
+India,Asia,62,4500,52
+USA,North America,242,28000,92
+UK,Europe,118,15500,96
+Canada,North America,196,18000,94
+Germany,Europe,102,3200,93
+Australia,Oceania,87,20000,91

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+server/data/uploads/
+server/data/datasets.json
+.env
+*.log
+.DS_Store
+
+# session config + personal notes (not for the public repo)
+.claude/
+INTERVIEW_PREP.md
+PLAN.md
