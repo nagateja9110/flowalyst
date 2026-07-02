@@ -90,16 +90,20 @@ npm install --prefix client
 npm run dev                      # server on :5002, client on :5173
 ```
 
-A seed dataset (`student_social_media`) is registered automatically. Try:
+Three seed datasets from one e-commerce domain register automatically — `customers`, `orders`, and `products`, linked by `customer_id`/`product_id` so JOIN questions work out of the box. Try:
 
-> *"What's the average screen time by platform?"*
-> *"Do students who sleep more have better GPAs?"*
+> *"Which city generated the most revenue from delivered orders?"*
+> *"Which product category has the highest return rate?"*
 
-Without an API key, the same chat box accepts raw SQL against the table `data`:
+Without an API key, the same chat box accepts raw SQL (`data` aliases the selected table; all tables are JOINable by name):
 
 ```sql
-SELECT most_used_platform, round(avg(daily_screen_time_hours),2)
-FROM data GROUP BY 1 ORDER BY 2 DESC
+SELECT c.city, SUM(o.quantity * p.price) AS revenue
+FROM orders o
+JOIN customers c USING (customer_id)
+JOIN products  p USING (product_id)
+WHERE o.status = 'delivered'
+GROUP BY 1 ORDER BY 2 DESC
 ```
 
 ## API

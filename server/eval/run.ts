@@ -31,8 +31,12 @@ if (!activeProvider) {
 }
 const runAgent = activeProvider === "gemini" ? runGeminiAgent : runAnthropicAgent;
 
-const seedCsv = path.join(SEED_DIR, "student_social_media.csv");
-const sources: TableSource[] = [{ name: "student_social_media", path: seedCsv }];
+const seedCsv = path.join(SEED_DIR, "orders.csv");
+const sources: TableSource[] = [
+  { name: "orders", path: seedCsv },
+  { name: "customers", path: path.join(SEED_DIR, "customers.csv") },
+  { name: "products", path: path.join(SEED_DIR, "products.csv") },
+];
 
 interface CaseResult {
   pass: boolean;

@@ -159,7 +159,7 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
           <div className="mt-16 text-center text-sm text-zinc-500">
             {hasApiKey ? (
               <>Ask a question about this dataset, e.g.<br />
-                <span className="text-zinc-400">“What's the average screen time by platform?”</span></>
+                <span className="text-zinc-400">“Which city generated the most revenue from delivered orders?”</span></>
             ) : (
               <>Manual SQL mode (no ANTHROPIC_API_KEY set).<br />
                 Try: <span className="font-mono text-zinc-400">SELECT * FROM data LIMIT 10</span></>

@@ -1,0 +1,61 @@
+customer_id,name,city,state,age,signup_date
+1,Aarav Rao,Delhi,Delhi,35,2025-03-04
+2,Diya Rao,Hyderabad,Telangana,24,2025-06-23
+3,Divya Gupta,Delhi,Delhi,20,2025-01-08
+4,Kavya Iyer,Delhi,Delhi,50,2025-06-04
+5,Sanjay Iyer,Mumbai,Maharashtra,59,2025-06-29
+6,Rohan Das,Kolkata,West Bengal,55,2025-03-13
+7,Ishaan Rao,Mumbai,Maharashtra,45,2025-03-29
+8,Diya Iyer,Chennai,Tamil Nadu,39,2025-01-27
+9,Priya Patel,Delhi,Delhi,40,2025-03-30
+10,Vivaan Rao,Chennai,Tamil Nadu,47,2025-05-18
+11,Priya Patel,Delhi,Delhi,53,2025-03-17
+12,Divya Iyer,Pune,Maharashtra,22,2025-01-12
+13,Arjun Patel,Hyderabad,Telangana,32,2025-01-26
+14,Sneha Das,Kolkata,West Bengal,58,2025-04-04
+15,Karthik Nair,Bengaluru,Karnataka,31,2025-06-21
+16,Aditya Menon,Chennai,Tamil Nadu,58,2025-02-13
+17,Ishaan Das,Hyderabad,Telangana,42,2025-03-11
+18,Meera Sharma,Hyderabad,Telangana,32,2025-01-09
+19,Priya Khan,Pune,Maharashtra,22,2025-02-24
+20,Kavya Bose,Pune,Maharashtra,49,2025-04-12
+21,Diya Khan,Coimbatore,Tamil Nadu,26,2025-03-05
+22,Divya Gupta,Chennai,Tamil Nadu,55,2025-04-13
+23,Rohan Reddy,Pune,Maharashtra,50,2025-05-07
+24,Vivaan Patel,Delhi,Delhi,27,2025-06-10
+25,Rahul Menon,Bengaluru,Karnataka,22,2025-04-09
+26,Amit Das,Kolkata,West Bengal,51,2025-03-06
+27,Ananya Bose,Mumbai,Maharashtra,52,2025-03-10
+28,Ananya Khan,Pune,Maharashtra,45,2025-02-10
+29,Aarav Rao,Coimbatore,Tamil Nadu,34,2025-05-09
+30,Pooja Patel,Bengaluru,Karnataka,58,2025-03-18
+31,Diya Nair,Hyderabad,Telangana,28,2025-05-19
+32,Amit Nair,Mumbai,Maharashtra,49,2025-01-05
+33,Karthik Khan,Delhi,Delhi,33,2025-01-15
+34,Divya Patel,Hyderabad,Telangana,23,2025-05-05
+35,Sanjay Reddy,Delhi,Delhi,26,2025-06-18
+36,Sanjay Reddy,Coimbatore,Tamil Nadu,34,2025-05-16
+37,Kavya Joshi,Kolkata,West Bengal,30,2025-03-21
+38,Karthik Das,Kolkata,West Bengal,51,2025-04-26
+39,Rohan Iyer,Delhi,Delhi,22,2025-03-28
+40,Divya Joshi,Mumbai,Maharashtra,32,2025-05-31
+41,Aarav Patel,Hyderabad,Telangana,58,2025-01-16
+42,Aditya Sharma,Hyderabad,Telangana,39,2025-01-19
+43,Sneha Bose,Hyderabad,Telangana,49,2025-02-24
+44,Divya Menon,Bengaluru,Karnataka,48,2025-03-04
+45,Rahul Iyer,Coimbatore,Tamil Nadu,24,2025-01-25
+46,Karthik Gupta,Kolkata,West Bengal,44,2025-04-30
+47,Ananya Sharma,Mumbai,Maharashtra,43,2025-03-28
+48,Rohan Iyer,Delhi,Delhi,30,2025-05-18
+49,Diya Gupta,Coimbatore,Tamil Nadu,29,2025-03-13
+50,Rohan Patel,Coimbatore,Tamil Nadu,46,2025-05-21
+51,Vivaan Bose,Delhi,Delhi,52,2025-01-04
+52,Rohan Reddy,Delhi,Delhi,44,2025-05-05
+53,Kavya Gupta,Coimbatore,Tamil Nadu,21,2025-02-12
+54,Aarav Gupta,Kolkata,West Bengal,34,2025-04-27
+55,Rahul Rao,Chennai,Tamil Nadu,53,2025-06-19
+56,Diya Iyer,Coimbatore,Tamil Nadu,36,2025-02-25
+57,Divya Rao,Mumbai,Maharashtra,52,2025-01-16
+58,Vivaan Sharma,Pune,Maharashtra,55,2025-05-03
+59,Vivaan Joshi,Bengaluru,Karnataka,23,2025-02-17
+60,Amit Patel,Delhi,Delhi,33,2025-04-14

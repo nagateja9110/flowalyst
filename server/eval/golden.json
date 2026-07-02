@@ -1,47 +1,47 @@
 [
   {
-    "question": "Which platform has the highest average daily screen time?",
-    "answer_regex": "tiktok",
-    "concept": "GROUP BY + ORDER BY"
-  },
-  {
-    "question": "How many students are in this dataset?",
+    "question": "How many orders were cancelled?",
     "answer_regex": "\\b40\\b|\\bforty\\b",
-    "concept": "COUNT"
+    "concept": "WHERE filter + COUNT"
   },
   {
-    "question": "What is the average GPA of graduate students?",
-    "answer_regex": "8\\.39|8\\.4",
-    "concept": "filtered aggregate"
+    "question": "How many customers are from Mumbai?",
+    "answer_regex": "\\b7\\b|\\bseven\\b",
+    "concept": "WHERE filter on a second table"
   },
   {
-    "question": "Which country has the highest average mental health score?",
-    "answer_regex": "canada",
-    "concept": "GROUP BY + ranking"
+    "question": "Which product category sold the most units, counting only delivered orders?",
+    "answer_regex": "electronics",
+    "concept": "2-table JOIN + GROUP BY + SUM"
   },
   {
-    "question": "Is the correlation between daily screen time and GPA positive or negative?",
-    "answer_regex": "negative",
-    "concept": "CORR"
+    "question": "Which city generated the most revenue from delivered orders?",
+    "answer_regex": "delhi",
+    "concept": "3-table JOIN + GROUP BY revenue"
   },
   {
-    "question": "Which gender sleeps more on average?",
-    "answer_regex": "\\bmales?\\b|\\bmen\\b",
-    "concept": "GROUP BY comparison"
+    "question": "Which customer spent the most money on delivered orders?",
+    "answer_regex": "divya\\s+gupta",
+    "concept": "3-table JOIN + GROUP BY customer"
   },
   {
-    "question": "How many different countries are represented in the data?",
-    "answer_regex": "\\b6\\b|\\bsix\\b",
-    "concept": "COUNT DISTINCT"
+    "question": "Which single product generated the highest revenue from delivered orders?",
+    "answer_regex": "smartwatch",
+    "concept": "JOIN + revenue per product"
   },
   {
-    "question": "Split students into heavy users (over 6 hours of screen time) and light users (under 4 hours) and compare their average GPA.",
-    "answer_regex": "heavy",
-    "concept": "CASE WHEN bucketing"
+    "question": "Which month of 2025 had the highest revenue from delivered orders?",
+    "answer_regex": "may|2025-05",
+    "concept": "date truncation + GROUP BY month"
   },
   {
-    "question": "What is the average family income of these students?",
-    "answer_regex": "not|cannot|unable|doesn'?t|no such|isn'?t|does not",
-    "concept": "honesty — column doesn't exist"
+    "question": "Which product category has the highest return rate?",
+    "answer_regex": "books",
+    "concept": "conditional aggregation (returned/total)"
+  },
+  {
+    "question": "What is the average delivery time in days?",
+    "answer_regex": "not|cannot|unable|doesn'?t|no such|isn'?t|does not|n't",
+    "concept": "honesty — data cannot answer this"
   }
 ]

@@ -1,0 +1,25 @@
+product_id,product_name,category,price
+1,Wireless Earbuds,Electronics,2499
+2,Smartwatch,Electronics,5999
+3,Bluetooth Speaker,Electronics,1899
+4,Power Bank 20000mAh,Electronics,1499
+5,USB-C Cable,Electronics,299
+6,Laptop Sleeve,Electronics,799
+7,Running Shoes,Sports,3499
+8,Yoga Mat,Sports,899
+9,Cricket Bat,Sports,2799
+10,Badminton Racket,Sports,1599
+11,Cotton T-Shirt,Fashion,599
+12,Denim Jeans,Fashion,1799
+13,Leather Wallet,Fashion,999
+14,Sneakers,Fashion,2299
+15,Silk Saree,Fashion,4499
+16,Mystery Novel,Books,349
+17,Self-Help Bestseller,Books,449
+18,Cookbook,Books,699
+19,Air Fryer,Home,4999
+20,Bedsheet Set,Home,1299
+21,LED Desk Lamp,Home,899
+22,Non-stick Pan,Home,1099
+23,Wall Clock,Home,649
+24,Coffee Maker,Home,3299
