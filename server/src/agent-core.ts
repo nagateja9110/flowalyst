@@ -3,7 +3,7 @@ import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
 
 /** Events forwarded to the client over SSE — one per agent step, so the UI can
  *  render the self-correction loop live instead of only the final answer.
- *  Both providers (Anthropic, Gemini) emit exactly this shape. */
+ *  Both providers (Gemini, Groq) emit exactly this shape. */
 export type AgentEvent =
   | { type: "text"; delta: string }
   | { type: "tool_call"; sql: string }

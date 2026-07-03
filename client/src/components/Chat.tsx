@@ -206,7 +206,7 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
               <>Ask a question about this dataset, e.g.<br />
                 <span className="text-zinc-400">“Which city generated the most revenue from delivered orders?”</span></>
             ) : (
-              <>Manual SQL mode (no ANTHROPIC_API_KEY set).<br />
+              <>Manual SQL mode (no GEMINI or GROQ API key set).<br />
                 Try: <span className="font-mono text-zinc-400">SELECT * FROM data LIMIT 10</span></>
             )}
           </div>

@@ -63,7 +63,7 @@ Fail-closed by design: a rare legitimate query being rejected is acceptable; a d
 
 - **Follow-up questions** — prior Q/A pairs (capped at 8) ride along with each ask; "now break that down by gender" just works.
 - **Multi-table JOINs** — every uploaded dataset is a named view in the per-request DuckDB instance; the agent sees all schemas.
-- **Provider-agnostic core** — Claude and Gemini agents emit the same event stream from shared core logic (`agent-core.ts`); swapping providers is a config change, not a UI change. An API-key pool round-robins keys and benches any key that hits a rate limit, failing over mid-conversation.
+- **Provider-agnostic core** — Gemini and Groq agents emit the same event stream from shared core logic (`agent-core.ts`); swapping providers is a config change, not a UI change. An API-key pool round-robins keys and benches any key that hits a rate limit, failing over mid-conversation.
 - **Graceful degradation** — with no API key at all, the same chat box accepts raw SQL and still renders the table + chart.
 
 ## Impact
@@ -83,9 +83,10 @@ npm install --prefix client
 
 # Provider (pick one) — put it in server/.env or export it:
 #   GEMINI_API_KEY=...      free tier (aistudio.google.com)
-#   ANTHROPIC_API_KEY=...   strongest SQL reasoning
-# With neither key the app runs in manual SQL mode.
-# If both are set, Anthropic wins; force one with PROVIDER=gemini|anthropic.
+#   GROQ_API_KEY=...        free tier (console.groq.com)
+# Multiple keys with 429 failover: GEMINI_API_KEYS=k1,k2 / GROQ_API_KEYS=k1,k2
+# With no key the app runs in manual SQL mode.
+# If both are set, Gemini wins; force one with PROVIDER=gemini|groq.
 
 npm run dev                      # server on :5002, client on :5173
 ```
@@ -123,7 +124,7 @@ GROUP BY 1 ORDER BY 2 DESC
 
 ```sh
 npm run eval --prefix server                       # golden questions vs the active provider
-PROVIDER=anthropic npm run eval --prefix server    # compare providers
+PROVIDER=groq npm run eval --prefix server         # compare providers
 ```
 
 `server/eval/golden.json` holds questions with regex expectations (including an honesty case asking about a column that doesn't exist — the correct answer is "the data can't tell you"). The runner prints pass/fail, latency, and SQL-call count per question, and self-paces on Gemini's free-tier rate limit.
@@ -133,8 +134,8 @@ PROVIDER=anthropic npm run eval --prefix server    # compare providers
 ```
 server/src/
   index.ts        routes + SSE plumbing
-  agent.ts        Claude tool-use loop (run_sql tool, prompt-cached schema)
-  agent-gemini.ts Gemini function-calling loop (same event stream)
+  agent-gemini.ts Gemini function-calling loop (prompt-cached schema)
+  agent-groq.ts   Groq (Llama) tool-use loop (same event stream)
   agent-core.ts   shared rules, tool description, guarded SQL execution
   guardrails.ts   SELECT-only validation + LIMIT wrapping
   db.ts           DuckDB per-request instances, schema inference

@@ -16,22 +16,23 @@ export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 export const SEED_DIR = path.join(DATA_DIR, "seed");
 export const MANIFEST_PATH = path.join(DATA_DIR, "datasets.json");
 
-export const ANTHROPIC_MODEL = "claude-opus-4-8";
 export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+export const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
 export const MAX_AGENT_ITERATIONS = 6;
 export const QUERY_TIMEOUT_MS = 10_000;
 export const DEFAULT_ROW_LIMIT = 1000;
 
-export type Provider = "anthropic" | "gemini";
+export type Provider = "gemini" | "groq";
 
-/** Which LLM powers the agent. PROVIDER env forces one; otherwise Anthropic
- *  wins if both keys are set (stronger model), Gemini is the free-tier path,
- *  and null means manual-SQL-only mode. */
+/** Which LLM powers the agent. PROVIDER env forces one; otherwise Gemini wins
+ *  if its keys are set (live-verified path), Groq is the fallback provider,
+ *  and null means manual-SQL-only mode. Both providers read key POOLS
+ *  (GEMINI_API_KEYS / GROQ_API_KEYS, comma-separated) with 429 failover. */
 export function provider(): Provider | null {
   const forced = process.env.PROVIDER;
-  if (forced === "anthropic" || forced === "gemini") return forced;
-  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
-  if (process.env.GEMINI_API_KEY) return "gemini";
+  if (forced === "gemini" || forced === "groq") return forced;
+  if (process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS) return "gemini";
+  if (process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS) return "groq";
   return null;
 }
 

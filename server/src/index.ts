@@ -8,7 +8,7 @@ import { ensureDirs, registerSeeds, listDatasets, getDataset, registerDataset } 
 import { describeDataset, describeWorkspace, queryWorkspace, type TableSource } from "./db.js";
 import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
 import type { AgentEvent, Exchange } from "./agent-core.js";
-import { runAnthropicAgent } from "./agent.js";
+import { runGroqAgent } from "./agent-groq.js";
 import { runGeminiAgent } from "./agent-gemini.js";
 
 ensureDirs();
@@ -105,7 +105,7 @@ app.post("/api/ask", async (req, res) => {
     emit({
       type: "error",
       message:
-        "No LLM API key is set (ANTHROPIC_API_KEY or GEMINI_API_KEY) — natural-language questions are unavailable. " +
+        "No LLM API key is set (GEMINI_API_KEY/GEMINI_API_KEYS or GROQ_API_KEY/GROQ_API_KEYS) — natural-language questions are unavailable. " +
         "Use manual SQL mode instead (the query box below).",
     });
     emit({ type: "done" });
@@ -115,7 +115,7 @@ app.post("/api/ask", async (req, res) => {
   try {
     const sources = allSources();
     const ws = await describeWorkspace(sources, dataset.path);
-    const runAgent = activeProvider === "gemini" ? runGeminiAgent : runAnthropicAgent;
+    const runAgent = activeProvider === "gemini" ? runGeminiAgent : runGroqAgent;
     await runAgent(sources, dataset.path, ws, question, exchanges, emit);
   } catch (err) {
     emit({ type: "error", message: err instanceof Error ? err.message : String(err) });

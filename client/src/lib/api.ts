@@ -1,6 +1,6 @@
 import type { AgentEvent, Dataset, DatasetSchema, QueryResult } from "../types";
 
-export async function fetchConfig(): Promise<{ hasApiKey: boolean; provider: "anthropic" | "gemini" | null }> {
+export async function fetchConfig(): Promise<{ hasApiKey: boolean; provider: "gemini" | "groq" | null }> {
   return (await fetch("/api/config")).json();
 }
 

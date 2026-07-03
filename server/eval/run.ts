@@ -4,14 +4,14 @@
  * with numbers instead of vibes:
  *
  *   npm run eval --prefix server            # uses PROVIDER / available keys
- *   PROVIDER=anthropic npm run eval ...     # compare providers
+ *   PROVIDER=groq npm run eval ...          # compare providers
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SEED_DIR, provider } from "../src/config.js";
 import { describeWorkspace, type TableSource } from "../src/db.js";
-import { runAnthropicAgent } from "../src/agent.js";
+import { runGroqAgent } from "../src/agent-groq.js";
 import { runGeminiAgent } from "../src/agent-gemini.js";
 import type { AgentEvent } from "../src/agent-core.js";
 
@@ -26,10 +26,10 @@ const cases: GoldenCase[] = JSON.parse(fs.readFileSync(path.join(__dirname, "gol
 
 const activeProvider = provider();
 if (!activeProvider) {
-  console.error("No API key set (ANTHROPIC_API_KEY or GEMINI_API_KEY) — cannot run evals.");
+  console.error("No API key set (GEMINI_API_KEY(S) or GROQ_API_KEY(S)) — cannot run evals.");
   process.exit(1);
 }
-const runAgent = activeProvider === "gemini" ? runGeminiAgent : runAnthropicAgent;
+const runAgent = activeProvider === "gemini" ? runGeminiAgent : runGroqAgent;
 
 const seedCsv = path.join(SEED_DIR, "orders.csv");
 const sources: TableSource[] = [
@@ -47,7 +47,7 @@ interface CaseResult {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Free-tier Gemini allows ~10 requests/min and each question costs 2-3 requests,
-// so space the cases out; Anthropic needs no pacing.
+// so space the cases out; Groq's per-minute limits are looser.
 const CASE_DELAY_MS = activeProvider === "gemini" ? 25_000 : 0;
 
 async function runCase(c: GoldenCase): Promise<CaseResult> {

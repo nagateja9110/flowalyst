@@ -50,3 +50,8 @@ function parseKeys(...envValues: (string | undefined)[]): string[] {
 export const geminiPool = new KeyPool(
   parseKeys(process.env.GEMINI_API_KEYS, process.env.GEMINI_API_KEY),
 );
+
+/** All Groq keys: GROQ_API_KEYS (comma-separated) and/or GROQ_API_KEY. */
+export const groqPool = new KeyPool(
+  parseKeys(process.env.GROQ_API_KEYS, process.env.GROQ_API_KEY),
+);

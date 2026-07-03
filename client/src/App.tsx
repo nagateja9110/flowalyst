@@ -56,7 +56,7 @@ export default function App() {
               : "border-amber-700 bg-amber-950/60 text-amber-300"
           }`}
         >
-          {hasApiKey ? `agent mode · ${provider === "gemini" ? "Gemini" : "Claude"}` : "manual SQL mode"}
+          {hasApiKey ? `agent mode · ${provider === "gemini" ? "Gemini" : "Groq"}` : "manual SQL mode"}
         </span>
       </header>
 
