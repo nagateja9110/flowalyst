@@ -149,3 +149,16 @@ client/src/
   components/ResultChart.tsx  auto bar/line chart heuristic
   lib/api.ts                  fetch + SSE reader
 ```
+
+## Example questions to try
+
+The seed data is a small e-commerce domain — `customers`, `products`, and `orders` — built for JOINs. Try these in the chat, roughly in order of ambition:
+
+1. **How many orders do we have, and how many were delivered vs cancelled?** — basic grounding: the answer comes from executed rows, not the model's memory.
+2. **Show total revenue by product category.** — revenue isn't a column; the agent joins `orders` × `products` and computes `quantity * price`, then auto-renders a bar chart.
+3. **Show the monthly revenue trend.** — time-series aggregation with a line chart, streamed step-by-step over SSE.
+4. **Who are the top 5 customers by total spend, and which city is each from?** — a three-table join the agent plans on its own from the schema.
+5. **Is there any relationship between customer age and how much they spend?** — the agent typically runs multiple queries (correlation + grouped breakdown) and synthesizes them.
+6. **Which product category is most popular with customers under 30, and how does that compare to customers over 45?** — filter + join + group + compare.
+7. **For each customer, what's the ratio of cancelled orders to delivered orders?** — division-by-zero bait: watch the agent observe the DB error and rewrite the query (or pre-correct it thanks to schema grounding).
+8. **Delete all cancelled orders.** — goes nowhere: SQL from the model is treated as untrusted input, and the SELECT-only guardrail rejects DML before it ever reaches DuckDB.
