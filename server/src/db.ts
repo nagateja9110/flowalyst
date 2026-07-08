@@ -10,6 +10,9 @@ export interface QueryResult {
 export interface TableSource {
   name: string;
   path: string;
+  /** Precomputed schema (from the manifest cache). If present, describeWorkspace
+   *  uses it instead of re-introspecting the file. */
+  schema?: DatasetSchema;
 }
 
 /** Dataset name → SQL identifier (lowercase, safe chars, no leading digit). */
@@ -20,27 +23,65 @@ export function tableNameFor(raw: string): string {
 }
 
 /**
- * Fresh in-memory DuckDB per request: every dataset is exposed as a view named
- * after it, and `data` is an alias for the currently selected dataset. Nothing
- * persists between queries, so a query can never observe another request.
+ * Fresh in-memory DuckDB per request: every dataset is materialised into a real
+ * table named after it, and `data` is a view aliasing the selected dataset.
+ *
+ * Security: each CSV is read once via read_csv_auto during load (CREATE TABLE
+ * AS), then `enable_external_access` is turned OFF before the untrusted
+ * LLM-generated query runs. After that the query physically cannot open a file
+ * (read_csv/read_parquet/etc. all fail) — the guardrail moves from a regex
+ * blocklist into the database engine's own capability model. Nothing persists
+ * between requests, so a query can never observe another request.
  */
 async function connectWorkspace(sources: TableSource[], primaryPath?: string): Promise<DuckDBConnection> {
   const instance = await DuckDBInstance.create(":memory:");
   const conn = await instance.connect();
-  const seen = new Set<string>(primaryPath ? ["data"] : []);
+  const seen = new Set<string>(["data"]);
+  let primaryTable: string | undefined;
   for (const s of sources) {
     let table = tableNameFor(s.name);
     while (seen.has(table)) table += "_2";
     seen.add(table);
-    const p = s.path.replace(/'/g, "''");
-    await conn.run(`CREATE VIEW ${table} AS SELECT * FROM read_csv_auto('${p}')`);
+    await conn.run(`CREATE TABLE ${table} AS ${readExpr(s.path)}`);
+    if (s.path === primaryPath && primaryTable === undefined) primaryTable = table;
   }
   if (primaryPath) {
-    const p = primaryPath.replace(/'/g, "''");
-    await conn.run(`CREATE VIEW data AS SELECT * FROM read_csv_auto('${p}')`);
+    // `data` aliases the selected dataset. If it was already materialised as a
+    // named table (multi-dataset workspace), point at that; otherwise (single
+    // dataset / eval path) materialise it directly. Either way `data` is backed
+    // by an in-memory table, so it survives the file-access lockdown below.
+    if (primaryTable) {
+      await conn.run(`CREATE VIEW data AS SELECT * FROM ${primaryTable}`);
+    } else {
+      await conn.run(`CREATE TABLE data AS ${readExpr(primaryPath)}`);
+    }
   }
+  // Data is loaded; the untrusted query runs with no file access.
+  await conn.run("SET enable_external_access = false");
   return conn;
 }
+
+/** DuckDB reader for a file, picked by extension. All of these read the file at
+ *  load time (CREATE TABLE AS), before external access is locked down. */
+function readExpr(filePath: string): string {
+  const p = filePath.replace(/'/g, "''");
+  const ext = filePath.toLowerCase().split(".").pop() ?? "";
+  switch (ext) {
+    case "parquet":
+      return `SELECT * FROM read_parquet('${p}')`;
+    case "json":
+    case "ndjson":
+      return `SELECT * FROM read_json_auto('${p}')`;
+    case "tsv":
+      return `SELECT * FROM read_csv_auto('${p}', delim='\t')`;
+    default: // csv and anything else → CSV sniffer
+      return `SELECT * FROM read_csv_auto('${p}')`;
+  }
+}
+
+/** Accepted upload extensions. CSV-only by product choice; readExpr can still
+ *  parse other formats, so widening this later is a one-line change. */
+export const SUPPORTED_EXTENSIONS = [".csv"];
 
 export async function queryWorkspace(
   sources: TableSource[],
@@ -49,7 +90,7 @@ export async function queryWorkspace(
 ): Promise<QueryResult> {
   const conn = await connectWorkspace(sources, primaryPath);
   try {
-    const result = await withTimeout(conn.runAndReadAll(sql), QUERY_TIMEOUT_MS);
+    const result = await withTimeout(conn.runAndReadAll(sql), QUERY_TIMEOUT_MS, conn);
     const columns = result.columnNames();
     // getRowObjectsJson() converts DuckDB values (BigInt, DATE, ...) to JSON-safe ones.
     const rows = result.getRowObjectsJson() as Record<string, unknown>[];
@@ -109,7 +150,7 @@ export async function describeWorkspace(sources: TableSource[], primaryPath: str
     let table = tableNameFor(s.name);
     while (seen.has(table)) table += "_2";
     seen.add(table);
-    const schema = await describeDataset(s.path);
+    const schema = s.schema ?? await describeDataset(s.path); // cached when available
     const isPrimary = s.path === primaryPath;
     if (isPrimary) primaryTable = table;
     tables.push({ ...schema, table, isPrimary });
@@ -117,9 +158,14 @@ export async function describeWorkspace(sources: TableSource[], primaryPath: str
   return { tables, primaryTable };
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(p: Promise<T>, ms: number, conn?: DuckDBConnection): Promise<T> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`Query exceeded ${ms}ms timeout`)), ms);
+    const t = setTimeout(() => {
+      // Actually stop the running query in the engine, not just reject the
+      // promise — otherwise DuckDB keeps computing until the instance is freed.
+      conn?.interrupt();
+      reject(new Error(`Query exceeded ${ms}ms timeout`));
+    }, ms);
     p.then(
       (v) => { clearTimeout(t); resolve(v); },
       (e) => { clearTimeout(t); reject(e); },

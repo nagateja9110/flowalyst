@@ -10,5 +10,21 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      - key: GEMINI_API_KEY
-        sync: false # set in the Render dashboard; without it the app runs in manual SQL mode
+      # Provider keys (comma-separated pools). Set in the dashboard; without any
+      # key the app still runs in manual-SQL mode.
+      - key: GEMINI_API_KEYS
+        sync: false
+      - key: GROQ_API_KEYS
+        sync: false
+      # Persist uploads + manifest on the mounted disk below (see note).
+      # - key: DATA_DIR
+      #   value: /var/data
+
+    # Uploaded datasets live on local disk, which is wiped on every redeploy of a
+    # free instance. To keep uploads across deploys, upgrade off `free` and
+    # uncomment this disk plus the DATA_DIR env var above. Seeds always reload
+    # from the repo, so the demo works either way.
+    # disk:
+    #   name: flowalyst-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

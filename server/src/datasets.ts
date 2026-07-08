@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { MANIFEST_PATH, UPLOADS_DIR, SEED_DIR } from "./config.js";
+import { describeDataset, type DatasetSchema } from "./db.js";
 
 export interface Dataset {
   id: string;
@@ -9,6 +10,9 @@ export interface Dataset {
   filename: string;
   path: string;
   uploadedAt: string;
+  /** Column/sample/row-count schema, computed once at upload and cached here so
+   *  /api/ask doesn't re-introspect every CSV on every request. */
+  schema?: DatasetSchema;
 }
 
 function readManifest(): Dataset[] {
@@ -39,6 +43,49 @@ export function registerDataset(name: string, storedPath: string): Dataset {
   };
   writeManifest([...readManifest(), dataset]);
   return dataset;
+}
+
+/** Remove a dataset from the manifest. Physically deletes the file only if it
+ *  lives under the uploads dir — seed files are demo data and are left on disk
+ *  (a deleted seed simply re-registers on the next restart). */
+export function deleteDataset(id: string): boolean {
+  const datasets = readManifest();
+  const target = datasets.find((d) => d.id === id);
+  if (!target) return false;
+  writeManifest(datasets.filter((d) => d.id !== id));
+  const resolved = path.resolve(target.path);
+  if (resolved.startsWith(path.resolve(UPLOADS_DIR) + path.sep) && fs.existsSync(resolved)) {
+    try { fs.unlinkSync(resolved); } catch { /* best effort */ }
+  }
+  return true;
+}
+
+/** Persist a computed schema onto a dataset in the manifest. */
+export function saveDatasetSchema(id: string, schema: DatasetSchema): void {
+  const datasets = readManifest();
+  const d = datasets.find((x) => x.id === id);
+  if (!d) return;
+  d.schema = schema;
+  writeManifest(datasets);
+}
+
+/** Compute + cache the schema for any dataset that doesn't have one yet.
+ *  Called at startup so seeds (and manifests from before this feature) are
+ *  backfilled once instead of on every request. */
+export async function ensureAllSchemas(): Promise<void> {
+  // Snapshot only the ids/paths to backfill, then persist each via
+  // saveDatasetSchema (an atomic re-read + write). Holding one snapshot across
+  // the awaits below and writing it back at the end would clobber any dataset
+  // registered concurrently — this avoids that lost-update entirely.
+  const pending = readManifest().filter((d) => !d.schema).map((d) => ({ id: d.id, path: d.path }));
+  for (const d of pending) {
+    try {
+      const schema = await describeDataset(d.path);
+      saveDatasetSchema(d.id, schema);
+    } catch {
+      /* unreadable file — leave uncached; describeWorkspace will surface it */
+    }
+  }
 }
 
 /** Register any CSVs in data/seed/ that aren't in the manifest yet. */

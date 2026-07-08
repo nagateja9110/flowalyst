@@ -11,10 +11,16 @@ try {
 }
 
 export const PORT = Number(process.env.PORT ?? 5002);
-export const DATA_DIR = path.resolve(__dirname, "../data");
-export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
-export const SEED_DIR = path.join(DATA_DIR, "seed");
-export const MANIFEST_PATH = path.join(DATA_DIR, "datasets.json");
+
+// Seeds ship in the repo (read-only). Uploads + the manifest are mutable state:
+// point DATA_DIR at a mounted disk in production so they survive redeploys;
+// locally it defaults to the repo's data/ dir.
+const REPO_DATA = path.resolve(__dirname, "../data");
+const STATE_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : REPO_DATA;
+export const DATA_DIR = STATE_DIR;
+export const UPLOADS_DIR = path.join(STATE_DIR, "uploads");
+export const MANIFEST_PATH = path.join(STATE_DIR, "datasets.json");
+export const SEED_DIR = path.join(REPO_DATA, "seed");
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 export const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";

@@ -39,7 +39,7 @@ const sources: TableSource[] = [
 ];
 
 interface CaseResult {
-  pass: boolean;
+  status: "pass" | "fail" | "skip"; // skip = couldn't run (rate-limited), not a wrong answer
   seconds: number;
   sqlCalls: number;
   answer: string;
@@ -49,6 +49,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Free-tier Gemini allows ~10 requests/min and each question costs 2-3 requests,
 // so space the cases out; Groq's per-minute limits are looser.
 const CASE_DELAY_MS = activeProvider === "gemini" ? 25_000 : 0;
+
+/** A rate-limit / quota error is an infrastructure problem, not a wrong answer —
+ *  distinguished from logic failures so the pass-rate reflects correctness. */
+const isRateLimited = (answer: string) =>
+  /\b429\b|RESOURCE_EXHAUSTED|quota|rate-?limited/i.test(answer);
 
 async function runCase(c: GoldenCase): Promise<CaseResult> {
   const ws = await describeWorkspace(sources, seedCsv);
@@ -64,39 +69,45 @@ async function runCase(c: GoldenCase): Promise<CaseResult> {
   } catch (err) {
     answer += ` [agent error: ${err instanceof Error ? err.message : err}]`;
   }
-  return {
-    pass: new RegExp(c.answer_regex, "i").test(answer),
-    seconds: (Date.now() - start) / 1000,
-    sqlCalls,
-    answer,
-  };
+  const seconds = (Date.now() - start) / 1000;
+  if (new RegExp(c.answer_regex, "i").test(answer)) return { status: "pass", seconds, sqlCalls, answer };
+  if (isRateLimited(answer)) return { status: "skip", seconds, sqlCalls, answer };
+  return { status: "fail", seconds, sqlCalls, answer };
 }
 
-console.log(`Provider: ${activeProvider}\nDataset:  student_social_media (seed)\n`);
+console.log(`Provider: ${activeProvider}\nDataset:  ${sources.map((s) => s.name).join(", ")} (seed)\n`);
 
 let passed = 0;
+let skipped = 0;
 const failures: { c: GoldenCase; r: CaseResult }[] = [];
 
 for (let i = 0; i < cases.length; i++) {
   const c = cases[i];
   if (i > 0 && CASE_DELAY_MS > 0) await sleep(CASE_DELAY_MS);
   let r = await runCase(c); // sequential — respects free-tier rate limits
-  if (!r.pass && r.answer.includes('"code":429')) {
+  if (r.status === "skip") {
     console.log(`    rate-limited — waiting 60s and retrying case ${i + 1}...`);
     await sleep(60_000);
     r = await runCase(c);
   }
-  if (r.pass) passed++;
+  if (r.status === "pass") passed++;
+  else if (r.status === "skip") skipped++;
   else failures.push({ c, r });
-  const status = r.pass ? "PASS" : "FAIL";
+  const status = r.status.toUpperCase();
   console.log(
     `${String(i + 1).padStart(2)}. [${status}] ${r.seconds.toFixed(1).padStart(5)}s  ${String(r.sqlCalls)} sql  ` +
     `(${c.concept}) ${c.question}`,
   );
 }
 
-console.log(`\n${passed}/${cases.length} passed (${Math.round((100 * passed) / cases.length)}%)`);
+const ran = cases.length - skipped;
+console.log(
+  `\n${passed}/${ran} answered correctly` +
+  `${skipped ? ` (${skipped} skipped — rate-limited, not run)` : ""}` +
+  `${ran ? ` — ${Math.round((100 * passed) / ran)}%` : ""}`,
+);
 for (const { c, r } of failures) {
   console.log(`\nFAILED: ${c.question}\n  expected /${c.answer_regex}/i\n  answer: ${r.answer.slice(0, 300)}`);
 }
+// Exit non-zero only on real logic failures; rate-limit skips don't fail CI.
 process.exit(failures.length === 0 ? 0 : 1);

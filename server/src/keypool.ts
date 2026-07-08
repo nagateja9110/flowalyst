@@ -1,3 +1,7 @@
+// Load server/.env before the pools below read process.env at module init.
+// Without this, importing keypool before config would yield empty pools.
+import "./config.js";
+
 /**
  * Round-robin API-key pool with per-key cooldown. On a 429 the key that hit
  * the limit is benched for a cooldown window and the next key takes over —

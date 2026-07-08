@@ -12,7 +12,8 @@
   "dependencies": {
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "recharts": "^3.9.1"
+    "recharts": "^3.9.1",
+    "sql-formatter": "^15.8.2"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",

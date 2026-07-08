@@ -127,7 +127,9 @@ npm run eval --prefix server                       # golden questions vs the act
 PROVIDER=groq npm run eval --prefix server         # compare providers
 ```
 
-`server/eval/golden.json` holds questions with regex expectations (including an honesty case asking about a column that doesn't exist — the correct answer is "the data can't tell you"). The runner prints pass/fail, latency, and SQL-call count per question, and self-paces on Gemini's free-tier rate limit.
+`server/eval/golden.json` holds questions with regex expectations (including an honesty case asking about a column that doesn't exist — the correct answer is "the data can't tell you"). Each case is scored **pass / fail / skip**, where `skip` = couldn't run because of a rate limit (infrastructure), so it never counts as a wrong answer. The runner prints latency and SQL-call count per question, self-paces on Gemini's free-tier rate limit, and exits non-zero only on real logic failures.
+
+Latest run (e-commerce seed, 9 cases): **Gemini 9/9, Groq (llama-3.3-70b) 8/9**. The eval earned its keep — it caught a self-inflicted regression (forcing a first-turn tool call made Llama emit malformed tool-call syntax that Groq rejected; fixed by re-rolling on `tool_use_failed`), a semantic bug (a model ranking return *count* instead of *rate*; fixed with a general prompt rule), and a genuine capability gap (on "average delivery time" — a metric the data can't support — Gemini declines, while the weaker Llama fabricates it from unrelated date columns). That last one is left as-is: forcing a weaker model to pass it would be overfitting the metric.
 
 ## Project structure
 

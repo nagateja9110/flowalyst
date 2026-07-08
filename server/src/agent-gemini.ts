@@ -1,13 +1,16 @@
-import { GoogleGenAI, Type, type Content, type FunctionDeclaration, type Part } from "@google/genai";
+import { GoogleGenAI, Type, FunctionCallingConfigMode, type Content, type FunctionDeclaration, type Part } from "@google/genai";
 import { GEMINI_MODEL, MAX_AGENT_ITERATIONS } from "./config.js";
-import type { TableSource, WorkspaceSchema, QueryResult } from "./db.js";
+import type { TableSource, WorkspaceSchema } from "./db.js";
 import {
   type AgentEvent,
+  type AgentRunOptions,
   type Exchange,
   SYSTEM_RULES,
   RUN_SQL_DESCRIPTION,
   schemaText,
   executeRunSql,
+  historyAnswer,
+  ResultTracker,
 } from "./agent-core.js";
 import { geminiPool } from "./keypool.js";
 
@@ -62,25 +65,37 @@ export async function runGeminiAgent(
   question: string,
   history: Exchange[],
   emit: (e: AgentEvent) => void,
+  opts: AgentRunOptions = {},
 ): Promise<void> {
   const contents: Content[] = [
     ...history.flatMap((h): Content[] => [
       { role: "user", parts: [{ text: h.question }] },
-      { role: "model", parts: [{ text: h.answer }] },
+      { role: "model", parts: [{ text: historyAnswer(h) }] },
     ]),
     { role: "user", parts: [{ text: question }] },
   ];
-  let lastResult: { sql: string; data: QueryResult } | null = null;
+  const tracker = new ResultTracker();
 
   for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
+    if (opts.isAborted?.()) return; // client gone — stop before the next paid call
     const response = await generateWithFailover({
       model: GEMINI_MODEL,
       contents,
       config: {
         systemInstruction: `${SYSTEM_RULES}\n\n${schemaText(ws)}`,
         tools: [{ functionDeclarations: [RUN_SQL_DECL] }],
+        // Force a query on the first turn so answers are grounded in real data,
+        // not guessed from the sample rows in the schema. After that, let the
+        // model decide (it may need 0 or more follow-up queries).
+        toolConfig: {
+          functionCallingConfig: {
+            mode: iteration === 0 ? FunctionCallingConfigMode.ANY : FunctionCallingConfigMode.AUTO,
+            allowedFunctionNames: iteration === 0 ? ["run_sql"] : undefined,
+          },
+        },
       },
     });
+    if (opts.isAborted?.()) return; // disconnected during the call — don't emit
 
     const modelContent = response.candidates?.[0]?.content;
     if (modelContent) contents.push(modelContent);
@@ -92,12 +107,7 @@ export async function runGeminiAgent(
 
     const calls = response.functionCalls ?? [];
     if (calls.length === 0) {
-      emit({
-        type: "result",
-        sql: lastResult?.sql ?? null,
-        columns: lastResult?.data.columns ?? [],
-        rows: lastResult?.data.rows ?? [],
-      });
+      emit({ type: "result", ...tracker.display() });
       return;
     }
 
@@ -107,7 +117,7 @@ export async function runGeminiAgent(
       emit({ type: "tool_call", sql });
 
       const exec = await executeRunSql(sources, primaryPath, sql);
-      if (exec.ok && exec.data) lastResult = { sql, data: exec.data };
+      if (exec.ok && exec.data) tracker.record(sql, exec.data);
       emit({ type: "tool_result", ok: exec.ok, rowCount: exec.rowCount, error: exec.error });
       parts.push({
         functionResponse: {

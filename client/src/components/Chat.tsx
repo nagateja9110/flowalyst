@@ -3,6 +3,7 @@ import type { ChatMessage, QueryResult, TraceStep } from "../types";
 import { ask, runSql, type Exchange } from "../lib/api";
 import { ResultTable } from "./ResultTable";
 import { ResultChart } from "./ResultChart";
+import { Sql } from "./Sql";
 
 // Conversations survive reloads: persisted per dataset in localStorage,
 // capped so big result tables can't blow the ~5MB storage quota.
@@ -51,7 +52,9 @@ function TraceCard({ step, index }: { step: TraceStep; index: number }) {
           <span className="text-rose-400">✗ failed — retrying</span>
         )}
       </div>
-      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-zinc-300">{step.sql}</pre>
+      <div className="mt-1">
+        <Sql code={step.sql} />
+      </div>
       {step.error && <div className="mt-1 text-rose-400/90">{step.error}</div>}
     </div>
   );
@@ -66,7 +69,9 @@ function SqlBlock({ sql }: { sql: string }) {
       </button>
       {open && (
         <div className="mt-1 flex items-start gap-2">
-          <pre className="flex-1 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900 p-2 font-mono text-emerald-300 whitespace-pre-wrap">{sql}</pre>
+          <div className="flex-1 rounded-md border border-zinc-800 bg-zinc-900 p-2">
+            <Sql code={sql} />
+          </div>
           <button
             onClick={() => navigator.clipboard.writeText(sql)}
             className="rounded border border-zinc-700 px-2 py-1 text-zinc-400 hover:text-zinc-200"
@@ -141,7 +146,7 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
       const u = messages[i];
       const a = messages[i + 1];
       if (u.role === "user" && a.role === "assistant" && a.text && !a.error) {
-        history.push({ question: u.text, answer: a.text });
+        history.push({ question: u.text, answer: a.text, sql: a.result?.sql ?? undefined });
       }
     }
     setInput("");

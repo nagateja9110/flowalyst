@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Dataset, DatasetSchema } from "./types";
-import { fetchConfig, fetchDatasets, fetchSchema, uploadDataset } from "./lib/api";
+import { fetchConfig, fetchDatasets, fetchSchema, uploadDataset, deleteDataset } from "./lib/api";
 import { Chat } from "./components/Chat";
 
 export default function App() {
@@ -28,6 +28,16 @@ export default function App() {
     setSchema(null);
     fetchSchema(selected).then(setSchema).catch(() => setSchema(null));
   }, [selected]);
+
+  async function onDelete(id: string) {
+    if (!confirm("Delete this dataset? This can't be undone.")) return;
+    await deleteDataset(id);
+    setDatasets((prev) => {
+      const remaining = prev.filter((d) => d.id !== id);
+      if (selected === id) setSelected(remaining[0]?.id ?? null);
+      return remaining;
+    });
+  }
 
   async function onUpload(file: File) {
     setUploadError(null);
@@ -82,15 +92,26 @@ export default function App() {
           <div className="p-3">
             <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Datasets</div>
             {datasets.map((d) => (
-              <button
+              <div
                 key={d.id}
-                onClick={() => setSelected(d.id)}
-                className={`mb-1 block w-full truncate rounded-md px-2 py-1.5 text-left text-sm ${
+                className={`group mb-1 flex items-center rounded-md text-sm ${
                   selected === d.id ? "bg-emerald-900/40 text-emerald-200" : "text-zinc-300 hover:bg-zinc-900"
                 }`}
               >
-                {d.name}
-              </button>
+                <button
+                  onClick={() => setSelected(d.id)}
+                  className="flex-1 truncate px-2 py-1.5 text-left"
+                >
+                  {d.name}
+                </button>
+                <button
+                  onClick={() => onDelete(d.id)}
+                  title="Delete dataset"
+                  className="px-2 py-1.5 text-zinc-600 opacity-0 hover:text-rose-400 group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
             ))}
             {datasets.length === 0 && <div className="text-xs text-zinc-600">No datasets yet</div>}
           </div>

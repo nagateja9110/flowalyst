@@ -14,11 +14,57 @@ export type AgentEvent =
 
 /** A prior exchange, provider-agnostic. Each agent rebuilds its own message
  *  format from this plain transcript — that's what makes follow-up questions
- *  ("now break that down by gender") work across providers. */
+ *  ("now break that down by gender") work across providers. `sql` is the query
+ *  behind that answer, replayed so a follow-up can build on it instead of
+ *  re-deriving the joins/filters from scratch. */
 export interface Exchange {
   question: string;
   answer: string;
+  sql?: string;
 }
+
+/** Renders a prior exchange into the answer text sent back to the model, with
+ *  the SQL appended as a hint when available. */
+export function historyAnswer(h: Exchange): string {
+  return h.sql ? `${h.answer}\n[SQL used for that answer: ${h.sql}]` : h.answer;
+}
+
+/** Chooses which query result to display with the final answer. Prefers the
+ *  last query that returned rows, so a trailing 0-row verification query can't
+ *  blank out the table/chart the answer is actually about. */
+export class ResultTracker {
+  private any: { sql: string; data: QueryResult } | null = null;
+  private nonEmpty: { sql: string; data: QueryResult } | null = null;
+
+  record(sql: string, data: QueryResult): void {
+    this.any = { sql, data };
+    if (data.rowCount > 0) this.nonEmpty = { sql, data };
+  }
+
+  display(): { sql: string | null; columns: string[]; rows: Record<string, unknown>[] } {
+    const r = this.nonEmpty ?? this.any;
+    return { sql: r?.sql ?? null, columns: r?.data.columns ?? [], rows: r?.data.rows ?? [] };
+  }
+}
+
+/** Cross-cutting knobs both provider loops honour. */
+export interface AgentRunOptions {
+  /** Returns true if the client has disconnected — the loop stops calling the
+   *  LLM instead of burning quota into a dead socket. */
+  isAborted?: () => boolean;
+}
+
+/** Signature shared by every provider's agent loop, so the dispatch in index.ts
+ *  stays typed regardless of which provider is selected. */
+export type RunAgent = (
+  sources: TableSource[],
+  primaryPath: string,
+  ws: WorkspaceSchema,
+  question: string,
+  history: Exchange[],
+  emit: (e: AgentEvent) => void,
+  opts?: AgentRunOptions,
+) => Promise<void>;
 
 export const SYSTEM_RULES =
   "You are Flowalyst, a data analyst agent. You answer questions about the user's datasets by writing " +
@@ -27,6 +73,11 @@ export const SYSTEM_RULES =
   "- Always ground answers in query results; never invent numbers.\n" +
   "- The dialect is DuckDB. Query only the tables listed in the schema; you may JOIN across them.\n" +
   "- `data` is an alias for the currently selected table.\n" +
+  "- A 'rate', 'ratio', 'proportion', or 'percentage' is a computed fraction " +
+  "(matching rows / total rows), NOT a raw count. Rank by the fraction, not the count.\n" +
+  "- Before computing a metric, check that the columns it needs exist in the schema. If a required " +
+  "field is missing (e.g. there is no delivery/ship date to measure delivery time), state that the " +
+  "data cannot answer the question — do not substitute a different column or fabricate a value.\n" +
   "- Keep the final answer concise: the key numbers and a one-sentence takeaway.\n" +
   "- If the question cannot be answered from these datasets, say so.";
 

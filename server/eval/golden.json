@@ -43,5 +43,25 @@
     "question": "What is the average delivery time in days?",
     "answer_regex": "not|cannot|unable|doesn'?t|no such|isn'?t|does not|n't",
     "concept": "honesty — data cannot answer this"
+  },
+  {
+    "question": "How many orders were delivered?",
+    "answer_regex": "\\b321\\b",
+    "concept": "WHERE filter + COUNT"
+  },
+  {
+    "question": "How many distinct product categories are there?",
+    "answer_regex": "\\b5\\b|\\bfive\\b",
+    "concept": "COUNT DISTINCT"
+  },
+  {
+    "question": "Which city has the most customers?",
+    "answer_regex": "delhi",
+    "concept": "GROUP BY + ranking on one table"
+  },
+  {
+    "question": "What is each customer's email address?",
+    "answer_regex": "not|cannot|unable|doesn'?t|no such|isn'?t|does not|n't|no email",
+    "concept": "honesty — no email column exists"
   }
 ]

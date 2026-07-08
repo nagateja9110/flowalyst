@@ -22,6 +22,11 @@ export async function fetchSchema(id: string): Promise<DatasetSchema> {
   return res.json();
 }
 
+export async function deleteDataset(id: string): Promise<void> {
+  const res = await fetch(`/api/datasets/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) throw new Error("Delete failed");
+}
+
 export async function runSql(id: string, sql: string): Promise<QueryResult & { rowCount: number }> {
   const res = await fetch(`/api/datasets/${id}/query`, {
     method: "POST",
@@ -36,6 +41,7 @@ export async function runSql(id: string, sql: string): Promise<QueryResult & { r
 export interface Exchange {
   question: string;
   answer: string;
+  sql?: string;
 }
 
 /** POST /api/ask and invoke onEvent for each SSE `data:` line. */
