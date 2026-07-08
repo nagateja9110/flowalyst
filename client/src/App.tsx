@@ -53,11 +53,12 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-center gap-3">
+          <img src="/logo.svg" alt="" className="h-7 w-7 rounded-lg" />
           <h1 className="text-lg font-semibold tracking-tight">
             Flow<span className="text-emerald-400">alyst</span>
           </h1>
-          <span className="text-xs text-zinc-500">ask your CSV anything</span>
+          <span className="hidden text-xs text-zinc-500 sm:inline">ask your CSV anything</span>
         </div>
         <span
           className={`rounded-full border px-2.5 py-0.5 text-xs ${
