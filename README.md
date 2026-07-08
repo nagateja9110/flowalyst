@@ -4,6 +4,8 @@
 
 Built from scratch — no LangChain, no Flowise. Express + TypeScript server, React + Vite client, LLM tool use with an embedded DuckDB engine.
 
+**Live demo:** https://flowalyst.onrender.com — hosted on Render's free tier, so the first request after idle can take ~50s to wake the server.
+
 ## The problem
 
 Most of the world's ad-hoc data lives in CSV files, and most of the people holding them can't write SQL. The existing ways out are all bad in a different direction:
