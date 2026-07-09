@@ -3,7 +3,7 @@ import { format } from "sql-formatter";
 
 /** Pretty-print the query (clause-per-line, indented). Falls back to the raw
  *  string if the SQL is partial/unparseable. */
-function prettyPrint(code: string): string {
+function prettyPrint(code) {
   try {
     return format(code, { language: "postgresql" }); // DuckDB is Postgres-like
   } catch {
@@ -35,10 +35,10 @@ const COLORS = {
   ident: "#e4e4e7",    // default
 };
 
-export function Sql({ code }: { code: string }) {
+export function Sql({ code }) {
   const pretty = prettyPrint(code);
-  const parts: React.ReactNode[] = [];
-  let m: RegExpExecArray | null;
+  const parts = [];
+  let m;
   let i = 0;
   TOKEN.lastIndex = 0;
   while ((m = TOKEN.exec(pretty)) !== null) {

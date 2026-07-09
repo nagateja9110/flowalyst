@@ -2,10 +2,10 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
 } from "recharts";
 
-const isIdLike = (name: string) => /(^|_)id$|^id$/i.test(name);
-const isNumericCol = (rows: Record<string, unknown>[], key: string) =>
+const isIdLike = (name) => /(^|_)id$|^id$/i.test(name);
+const isNumericCol = (rows, key) =>
   rows.every((r) => r[key] !== null && r[key] !== "" && !isNaN(Number(r[key])));
-const isDateCol = (rows: Record<string, unknown>[], key: string) =>
+const isDateCol = (rows, key) =>
   rows.every((r) => !isNaN(Date.parse(String(r[key]))) && isNaN(Number(r[key])));
 
 /**
@@ -15,7 +15,7 @@ const isDateCol = (rows: Record<string, unknown>[], key: string) =>
  * Date x → line chart, categorical x → bar chart. No suitable pair → no chart
  * (the table is always shown regardless).
  */
-export function ResultChart({ columns, rows }: { columns: string[]; rows: Record<string, unknown>[] }) {
+export function ResultChart({ columns, rows }) {
   if (columns.length < 2 || rows.length < 2 || rows.length > 100) return null;
 
   const usable = columns.filter((c) => !isIdLike(c));

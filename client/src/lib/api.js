@@ -1,14 +1,12 @@
-import type { AgentEvent, Dataset, DatasetSchema, QueryResult } from "../types";
-
-export async function fetchConfig(): Promise<{ hasApiKey: boolean; provider: "gemini" | "groq" | null }> {
+export async function fetchConfig() {
   return (await fetch("/api/config")).json();
 }
 
-export async function fetchDatasets(): Promise<Dataset[]> {
+export async function fetchDatasets() {
   return (await fetch("/api/datasets")).json();
 }
 
-export async function uploadDataset(file: File): Promise<Dataset> {
+export async function uploadDataset(file) {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch("/api/datasets", { method: "POST", body: form });
@@ -16,18 +14,18 @@ export async function uploadDataset(file: File): Promise<Dataset> {
   return res.json();
 }
 
-export async function fetchSchema(id: string): Promise<DatasetSchema> {
+export async function fetchSchema(id) {
   const res = await fetch(`/api/datasets/${id}/schema`);
   if (!res.ok) throw new Error((await res.json()).error ?? "Schema failed");
   return res.json();
 }
 
-export async function deleteDataset(id: string): Promise<void> {
+export async function deleteDataset(id) {
   const res = await fetch(`/api/datasets/${id}`, { method: "DELETE" });
   if (!res.ok && res.status !== 404) throw new Error("Delete failed");
 }
 
-export async function runSql(id: string, sql: string): Promise<QueryResult & { rowCount: number }> {
+export async function runSql(id, sql) {
   const res = await fetch(`/api/datasets/${id}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,19 +36,13 @@ export async function runSql(id: string, sql: string): Promise<QueryResult & { r
   return body;
 }
 
-export interface Exchange {
-  question: string;
-  answer: string;
-  sql?: string;
-}
+/**
+ * A prior exchange sent back to the agent so follow-up questions have context:
+ * { question: string, answer: string, sql?: string }
+ */
 
 /** POST /api/ask and invoke onEvent for each SSE `data:` line. */
-export async function ask(
-  datasetId: string,
-  question: string,
-  history: Exchange[],
-  onEvent: (e: AgentEvent) => void,
-): Promise<void> {
+export async function ask(datasetId, question, history, onEvent) {
   const res = await fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -71,7 +63,7 @@ export async function ask(
     for (const part of parts) {
       const line = part.trim();
       if (line.startsWith("data: ")) {
-        onEvent(JSON.parse(line.slice(6)) as AgentEvent);
+        onEvent(JSON.parse(line.slice(6)));
       }
     }
   }

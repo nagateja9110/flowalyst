@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import type { Dataset, DatasetSchema } from "./types";
 import { fetchConfig, fetchDatasets, fetchSchema, uploadDataset, deleteDataset } from "./lib/api";
 import { Chat } from "./components/Chat";
 
 export default function App() {
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [schema, setSchema] = useState<DatasetSchema | null>(null);
+  const [datasets, setDatasets] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [schema, setSchema] = useState(null);
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [provider, setProvider] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [provider, setProvider] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     fetchConfig().then((c) => {
@@ -29,7 +28,7 @@ export default function App() {
     fetchSchema(selected).then(setSchema).catch(() => setSchema(null));
   }, [selected]);
 
-  async function onDelete(id: string) {
+  async function onDelete(id) {
     if (!confirm("Delete this dataset? This can't be undone.")) return;
     await deleteDataset(id);
     setDatasets((prev) => {
@@ -39,7 +38,7 @@ export default function App() {
     });
   }
 
-  async function onUpload(file: File) {
+  async function onUpload(file) {
     setUploadError(null);
     try {
       const d = await uploadDataset(file);

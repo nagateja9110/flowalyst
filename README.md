@@ -2,7 +2,7 @@
 
 **Ask your CSV anything.** Upload a dataset, ask a question in plain English, and get an answer backed by real SQL — with the agent's every query attempt streamed live to the screen, so the reasoning is visible, not claimed.
 
-Built from scratch — no LangChain, no Flowise. Express + TypeScript server, React + Vite client, LLM tool use with an embedded DuckDB engine.
+Built from scratch — no LangChain, no Flowise. Express + TypeScript server, React (JavaScript) + Vite client, LLM tool use with an embedded DuckDB engine.
 
 **Live demo:** https://flowalyst.onrender.com — hosted on Render's free tier, so the first request after idle can take ~50s to wake the server.
 
@@ -149,10 +149,10 @@ server/eval/
   golden.json     golden question set
   run.ts          eval runner (accuracy / latency / SQL calls)
 client/src/
-  components/Chat.tsx         chat, live trace cards, SQL block
-  components/ResultTable.tsx  result table
-  components/ResultChart.tsx  auto bar/line chart heuristic
-  lib/api.ts                  fetch + SSE reader
+  components/Chat.jsx         chat, live trace cards, SQL block
+  components/ResultTable.jsx  result table
+  components/ResultChart.jsx  auto bar/line chart heuristic
+  lib/api.js                  fetch + SSE reader
 ```
 
 ## Example questions to try

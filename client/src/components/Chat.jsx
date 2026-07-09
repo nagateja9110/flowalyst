@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage, QueryResult, TraceStep } from "../types";
-import { ask, runSql, type Exchange } from "../lib/api";
+import { ask, runSql } from "../lib/api";
 import { ResultTable } from "./ResultTable";
 import { ResultChart } from "./ResultChart";
 import { Sql } from "./Sql";
@@ -11,18 +10,18 @@ const STORAGE_PREFIX = "flowalyst-chat-";
 const MAX_STORED_MESSAGES = 30;
 const MAX_STORED_ROWS = 200;
 
-function loadMessages(datasetId: string): ChatMessage[] {
+function loadMessages(datasetId) {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + datasetId);
     if (!raw) return [];
     // A reload can never resurrect an in-flight request.
-    return (JSON.parse(raw) as ChatMessage[]).map((m) => ({ ...m, pending: false }));
+    return JSON.parse(raw).map((m) => ({ ...m, pending: false }));
   } catch {
     return [];
   }
 }
 
-function saveMessages(datasetId: string, messages: ChatMessage[]) {
+function saveMessages(datasetId, messages) {
   try {
     if (messages.length === 0) {
       localStorage.removeItem(STORAGE_PREFIX + datasetId);
@@ -39,7 +38,7 @@ function saveMessages(datasetId: string, messages: ChatMessage[]) {
   }
 }
 
-function TraceCard({ step, index }: { step: TraceStep; index: number }) {
+function TraceCard({ step, index }) {
   return (
     <div className="rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs">
       <div className="flex items-center gap-2 text-zinc-400">
@@ -60,7 +59,7 @@ function TraceCard({ step, index }: { step: TraceStep; index: number }) {
   );
 }
 
-function SqlBlock({ sql }: { sql: string }) {
+function SqlBlock({ sql }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="text-xs">
@@ -85,7 +84,7 @@ function SqlBlock({ sql }: { sql: string }) {
   );
 }
 
-function Message({ m }: { m: ChatMessage }) {
+function Message({ m }) {
   if (m.role === "user") {
     return (
       <div className="ml-auto max-w-[80%] rounded-2xl rounded-br-sm bg-emerald-700/30 border border-emerald-700/40 px-4 py-2 text-sm">
@@ -114,11 +113,11 @@ function Message({ m }: { m: ChatMessage }) {
   );
 }
 
-export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: boolean }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(datasetId));
+export function Chat({ datasetId, hasApiKey }) {
+  const [messages, setMessages] = useState(() => loadMessages(datasetId));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef(null);
 
   useEffect(() => {
     // Skip mid-stream saves (a write per token delta); the final state is
@@ -133,7 +132,7 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
 
   const scroll = () => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
 
-  const patchLast = (fn: (m: ChatMessage) => ChatMessage) =>
+  const patchLast = (fn) =>
     setMessages((ms) => ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)));
 
   async function submit() {
@@ -141,7 +140,7 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
     if (!question || busy) return;
     // Prior Q/A pairs → the agent sees the conversation, so follow-ups like
     // "now break that down by gender" resolve against earlier answers.
-    const history: Exchange[] = [];
+    const history = [];
     for (let i = 0; i < messages.length - 1; i++) {
       const u = messages[i];
       const a = messages[i + 1];
@@ -179,6 +178,8 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
                 return { ...m, error: e.message };
               case "done":
                 return { ...m, pending: false };
+              default:
+                return m;
             }
           });
           scroll();
@@ -190,7 +191,7 @@ export function Chat({ datasetId, hasApiKey }: { datasetId: string; hasApiKey: b
           ...m,
           pending: false,
           text: `${r.rowCount} row${r.rowCount === 1 ? "" : "s"}`,
-          result: { sql: r.sql, columns: r.columns, rows: r.rows } as QueryResult,
+          result: { sql: r.sql, columns: r.columns, rows: r.rows },
         }));
       }
     } catch (err) {

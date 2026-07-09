@@ -1,4 +1,4 @@
-export function ResultTable({ columns, rows }: { columns: string[]; rows: Record<string, unknown>[] }) {
+export function ResultTable({ columns, rows }) {
   if (rows.length === 0) return null;
   const shown = rows.slice(0, 50);
   return (
