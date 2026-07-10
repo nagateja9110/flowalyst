@@ -8,19 +8,49 @@ import {
   ensureDirs, registerSeeds, listDatasets, getDataset, registerDataset, deleteDataset,
   saveDatasetSchema, ensureAllSchemas, saveDatasetEmbedding, ensureAllEmbeddings,
 } from "./datasets.js";
-import { describeDataset, describeWorkspace, queryWorkspace, SUPPORTED_EXTENSIONS, type TableSource } from "./db.js";
+import { describeDataset, describeWorkspace, queryWorkspace, SUPPORTED_EXTENSIONS } from "./db.js";
 import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
 import { rateLimit } from "./rate-limit.js";
 import { embedText, datasetDocument } from "./embeddings.js";
 import { selectRelevantTables } from "./retrieval.js";
-import type { AgentEvent, Exchange, RunAgent } from "./agent-core.js";
+import { geminiPool, groqPool } from "./keypool.js";
 import { runGroqAgent } from "./agent-groq.js";
 import { runGeminiAgent } from "./agent-gemini.js";
+
+/** Providers to try, in order, for one /api/ask request. If PROVIDER is
+ *  forced via env, that's an explicit pin — respected with no fallback.
+ *  Otherwise: every provider with at least one configured key is a candidate,
+ *  Gemini preferred first, so a fully rate-limited Gemini pool falls through
+ *  to Groq instead of just failing the request. */
+function providerOrder() {
+  const forced = process.env.PROVIDER;
+  if (forced === "gemini" || forced === "groq") return [forced];
+  const order = [];
+  if (geminiPool.size() > 0) order.push("gemini");
+  if (groqPool.size() > 0) order.push("groq");
+  return order;
+}
+
+const AGENT_BY_PROVIDER = { gemini: runGeminiAgent, groq: runGroqAgent };
+const POOL_BY_PROVIDER = { gemini: geminiPool, groq: groqPool };
+
+/** Whether a provider's key pool has zero keys available right now (every key
+ *  on cooldown). Checked against the pool's own state — via the non-mutating
+ *  secondsUntilAvailable() — rather than by pattern-matching the error that
+ *  just surfaced: when only the *last* key in a pool fails, the failover loop
+ *  in each agent-*.js throws that key's own raw error, not the synthetic "all
+ *  keys are rate-limited" wrapper, so message-matching would miss exactly the
+ *  case this exists to catch. Any failure while the pool is provably empty is
+ *  worth trying the next provider for. */
+function isPoolExhausted(providerName) {
+  const pool = POOL_BY_PROVIDER[providerName];
+  return pool.size() > 0 && pool.secondsUntilAvailable() > 0;
+}
 
 ensureDirs();
 registerSeeds();
 await ensureAllSchemas();    // compute + cache schemas once, so /api/ask never re-introspects
-await ensureAllEmbeddings(); // compute + cache embeddings once, for RAG table retrieval (retrieval.ts)
+await ensureAllEmbeddings(); // compute + cache embeddings once, for RAG table retrieval (retrieval.js)
 
 const app = express();
 app.set("trust proxy", 1); // behind Render's proxy: req.ip reflects X-Forwarded-For
@@ -53,7 +83,7 @@ app.post("/api/datasets", uploadLimiter, upload.single("file"), async (req, res)
   if (!SUPPORTED_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
     return res.status(400).json({ error: `Unsupported file type. Supported: ${SUPPORTED_EXTENSIONS.join(", ")}` });
   }
-  const name = (req.body.name as string) || req.file.originalname.replace(/\.[^.]+$/, "");
+  const name = req.body.name || req.file.originalname.replace(/\.[^.]+$/, "");
   const dataset = registerDataset(name, req.file.path);
   let schema;
   try {
@@ -90,7 +120,7 @@ app.delete("/api/datasets/:id", (req, res) => {
   res.status(204).end();
 });
 
-function allSources(): TableSource[] {
+function allSources() {
   return listDatasets().map((d) => ({ name: d.name, path: d.path, schema: d.schema, embedding: d.embedding }));
 }
 
@@ -120,8 +150,8 @@ app.post("/api/ask", askLimiter, async (req, res) => {
 
   // Prior Q/A pairs from the client → follow-up questions keep their context.
   // Capped at 8 exchanges to bound token growth.
-  const exchanges: Exchange[] = (Array.isArray(history) ? history : [])
-    .filter((h): h is Exchange => typeof h?.question === "string" && typeof h?.answer === "string")
+  const exchanges = (Array.isArray(history) ? history : [])
+    .filter((h) => typeof h?.question === "string" && typeof h?.answer === "string")
     .slice(-8);
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -134,12 +164,18 @@ app.post("/api/ask", askLimiter, async (req, res) => {
   let aborted = false;
   res.on("close", () => { aborted = true; });
 
-  const emit = (e: AgentEvent) => {
-    if (!aborted) res.write(`data: ${JSON.stringify(e)}\n\n`);
+  // Track whether anything has reached the client yet — failover between
+  // providers is only safe before the first byte, so a mid-answer switch can
+  // never mix partial output from two different models in one response.
+  let emittedAny = false;
+  const emit = (e) => {
+    if (aborted) return;
+    emittedAny = true;
+    res.write(`data: ${JSON.stringify(e)}\n\n`);
   };
 
-  const activeProvider = provider();
-  if (!activeProvider) {
+  const providers = providerOrder();
+  if (providers.length === 0) {
     emit({
       type: "error",
       message:
@@ -156,8 +192,22 @@ app.post("/api/ask", askLimiter, async (req, res) => {
     // top-K tables by embedding similarity to the question go to the agent.
     const sources = await selectRelevantTables(question, allDatasets, dataset.path);
     const ws = await describeWorkspace(sources, dataset.path);
-    const runAgent: RunAgent = activeProvider === "gemini" ? runGeminiAgent : runGroqAgent;
-    await runAgent(sources, dataset.path, ws, question, exchanges, emit, { isAborted: () => aborted });
+
+    for (let i = 0; i < providers.length; i++) {
+      const p = providers[i];
+      const runAgent = AGENT_BY_PROVIDER[p];
+      const isLastProvider = i === providers.length - 1;
+      try {
+        await runAgent(sources, dataset.path, ws, question, exchanges, emit, { isAborted: () => aborted });
+        break; // this provider handled the request (success or its own {type:"error"})
+      } catch (err) {
+        if (isPoolExhausted(p) && !emittedAny && !isLastProvider) {
+          console.warn(`[failover] ${p}'s key pool is exhausted with no output sent yet — falling back to ${providers[i + 1]}`);
+          continue; // nothing shown to the client yet, safe to retry on the next provider
+        }
+        throw err; // a real error, or exhaustion with no fallback left — surface it
+      }
+    }
   } catch (err) {
     emit({ type: "error", message: err instanceof Error ? err.message : String(err) });
   }
@@ -168,7 +218,6 @@ app.post("/api/ask", askLimiter, async (req, res) => {
 });
 
 // Production: serve the built client from the same service (single deploy).
-// Resolves to <repo>/client/dist from both src/ (tsx dev) and dist/ (compiled).
 const CLIENT_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");
 if (fs.existsSync(CLIENT_DIST)) {
   app.use(express.static(CLIENT_DIST));

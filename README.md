@@ -2,7 +2,7 @@
 
 **Ask your CSV anything.** Upload a dataset, ask a question in plain English, and get an answer backed by real SQL — with the agent's every query attempt streamed live to the screen, so the reasoning is visible, not claimed.
 
-Built from scratch — no LangChain, no Flowise. Express + TypeScript server, React (JavaScript) + Vite client, LLM tool use with an embedded DuckDB engine.
+Built from scratch — no LangChain, no Flowise. Express + JavaScript server, React (JavaScript) + Vite client, LLM tool use with an embedded DuckDB engine.
 
 **Live demo:** https://flowalyst.onrender.com — hosted on Render's free tier, so the first request after idle can take ~50s to wake the server.
 
@@ -65,7 +65,7 @@ Fail-closed by design: a rare legitimate query being rejected is acceptable; a d
 
 - **Follow-up questions** — prior Q/A pairs (capped at 8) ride along with each ask; "now break that down by gender" just works.
 - **Multi-table JOINs** — every uploaded dataset is a named view in the per-request DuckDB instance; the agent sees all schemas.
-- **Provider-agnostic core** — Gemini and Groq agents emit the same event stream from shared core logic (`agent-core.ts`); swapping providers is a config change, not a UI change. An API-key pool round-robins keys and benches any key that hits a rate limit, failing over mid-conversation.
+- **Provider-agnostic core** — Gemini and Groq agents emit the same event stream from shared core logic (`agent-core.js`); swapping providers is a config change, not a UI change. An API-key pool round-robins keys and benches any key that hits a rate limit, failing over mid-conversation.
 - **Graceful degradation** — with no API key at all, the same chat box accepts raw SQL and still renders the table + chart.
 
 ## Impact
@@ -137,17 +137,19 @@ Latest run (e-commerce seed, 9 cases): **Gemini 9/9, Groq (llama-3.3-70b) 8/9**.
 
 ```
 server/src/
-  index.ts        routes + SSE plumbing
-  agent-gemini.ts Gemini function-calling loop (prompt-cached schema)
-  agent-groq.ts   Groq (Llama) tool-use loop (same event stream)
-  agent-core.ts   shared rules, tool description, guarded SQL execution
-  guardrails.ts   SELECT-only validation + LIMIT wrapping
-  db.ts           DuckDB per-request instances, schema inference
-  keypool.ts      round-robin API keys with 429 cooldown failover
-  datasets.ts     upload manifest + seed registration
+  index.js        routes + SSE plumbing
+  agent-gemini.js Gemini function-calling loop (prompt-cached schema)
+  agent-groq.js   Groq (Llama) tool-use loop (same event stream)
+  agent-core.js   shared rules, tool description, guarded SQL execution
+  guardrails.js   SELECT-only validation + LIMIT wrapping
+  db.js           DuckDB per-request instances, schema inference
+  keypool.js      round-robin API keys with 429 cooldown failover
+  datasets.js     upload manifest + seed registration
+  embeddings.js   Gemini embeddings + cosine similarity
+  retrieval.js    RAG table selection for many-dataset workspaces
 server/eval/
   golden.json     golden question set
-  run.ts          eval runner (accuracy / latency / SQL calls)
+  run.js          eval runner (accuracy / latency / SQL calls)
 client/src/
   components/Chat.jsx         chat, live trace cards, SQL block
   components/ResultTable.jsx  result table

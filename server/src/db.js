@@ -1,26 +1,28 @@
-import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
+import { DuckDBInstance } from "@duckdb/node-api";
 import { QUERY_TIMEOUT_MS } from "./config.js";
 
-export interface QueryResult {
-  columns: string[];
-  rows: Record<string, unknown>[];
-  rowCount: number;
-}
+/**
+ * @typedef {Object} QueryResult
+ * @property {string[]} columns
+ * @property {Record<string, unknown>[]} rows
+ * @property {number} rowCount
+ */
 
-export interface TableSource {
-  name: string;
-  path: string;
-  /** Precomputed schema (from the manifest cache). If present, describeWorkspace
-   *  uses it instead of re-introspecting the file. */
-  schema?: DatasetSchema;
-  /** Precomputed embedding vector (from the manifest cache), used by
-   *  retrieval.ts to rank table relevance without re-embedding on every
-   *  request — only the question itself is embedded per request. */
-  embedding?: number[];
-}
+/**
+ * @typedef {Object} TableSource
+ * @property {string} name
+ * @property {string} path
+ * @property {DatasetSchema} [schema] Precomputed schema (from the manifest
+ *   cache). If present, describeWorkspace uses it instead of re-introspecting
+ *   the file.
+ * @property {number[]} [embedding] Precomputed embedding vector (from the
+ *   manifest cache), used by retrieval.js to rank table relevance without
+ *   re-embedding on every request — only the question itself is embedded per
+ *   request.
+ */
 
 /** Dataset name → SQL identifier (lowercase, safe chars, no leading digit). */
-export function tableNameFor(raw: string): string {
+export function tableNameFor(raw) {
   let name = raw.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
   if (!name || /^\d/.test(name)) name = `t_${name}`;
   return name;
@@ -36,12 +38,15 @@ export function tableNameFor(raw: string): string {
  * (read_csv/read_parquet/etc. all fail) — the guardrail moves from a regex
  * blocklist into the database engine's own capability model. Nothing persists
  * between requests, so a query can never observe another request.
+ *
+ * @param {TableSource[]} sources
+ * @param {string} [primaryPath]
  */
-async function connectWorkspace(sources: TableSource[], primaryPath?: string): Promise<DuckDBConnection> {
+async function connectWorkspace(sources, primaryPath) {
   const instance = await DuckDBInstance.create(":memory:");
   const conn = await instance.connect();
-  const seen = new Set<string>(["data"]);
-  let primaryTable: string | undefined;
+  const seen = new Set(["data"]);
+  let primaryTable;
   for (const s of sources) {
     let table = tableNameFor(s.name);
     while (seen.has(table)) table += "_2";
@@ -67,7 +72,7 @@ async function connectWorkspace(sources: TableSource[], primaryPath?: string): P
 
 /** DuckDB reader for a file, picked by extension. All of these read the file at
  *  load time (CREATE TABLE AS), before external access is locked down. */
-function readExpr(filePath: string): string {
+function readExpr(filePath) {
   const p = filePath.replace(/'/g, "''");
   const ext = filePath.toLowerCase().split(".").pop() ?? "";
   switch (ext) {
@@ -87,17 +92,19 @@ function readExpr(filePath: string): string {
  *  parse other formats, so widening this later is a one-line change. */
 export const SUPPORTED_EXTENSIONS = [".csv"];
 
-export async function queryWorkspace(
-  sources: TableSource[],
-  primaryPath: string | undefined,
-  sql: string,
-): Promise<QueryResult> {
+/**
+ * @param {TableSource[]} sources
+ * @param {string | undefined} primaryPath
+ * @param {string} sql
+ * @returns {Promise<QueryResult>}
+ */
+export async function queryWorkspace(sources, primaryPath, sql) {
   const conn = await connectWorkspace(sources, primaryPath);
   try {
     const result = await withTimeout(conn.runAndReadAll(sql), QUERY_TIMEOUT_MS, conn);
     const columns = result.columnNames();
     // getRowObjectsJson() converts DuckDB values (BigInt, DATE, ...) to JSON-safe ones.
-    const rows = result.getRowObjectsJson() as Record<string, unknown>[];
+    const rows = result.getRowObjectsJson();
     return { columns, rows, rowCount: rows.length };
   } finally {
     conn.closeSync();
@@ -105,32 +112,36 @@ export async function queryWorkspace(
 }
 
 /** Single-dataset convenience: the CSV is queryable as `data`. */
-export function queryDataset(csvPath: string, sql: string): Promise<QueryResult> {
+export function queryDataset(csvPath, sql) {
   return queryWorkspace([], csvPath, sql);
 }
 
-export interface ColumnInfo {
-  name: string;
-  type: string;
-}
+/**
+ * @typedef {Object} ColumnInfo
+ * @property {string} name
+ * @property {string} type
+ */
 
-export interface DatasetSchema {
-  table: string;
-  columns: ColumnInfo[];
-  sampleRows: Record<string, unknown>[];
-  rowCount: number;
-}
+/**
+ * @typedef {Object} DatasetSchema
+ * @property {string} table
+ * @property {ColumnInfo[]} columns
+ * @property {Record<string, unknown>[]} sampleRows
+ * @property {number} rowCount
+ */
 
-export interface TableSchema extends DatasetSchema {
-  isPrimary: boolean;
-}
+/**
+ * @typedef {DatasetSchema & {isPrimary: boolean}} TableSchema
+ */
 
-export interface WorkspaceSchema {
-  tables: TableSchema[];
-  primaryTable: string;
-}
+/**
+ * @typedef {Object} WorkspaceSchema
+ * @property {TableSchema[]} tables
+ * @property {string} primaryTable
+ */
 
-export async function describeDataset(csvPath: string): Promise<DatasetSchema> {
+/** @returns {Promise<DatasetSchema>} */
+export async function describeDataset(csvPath) {
   const describe = await queryDataset(csvPath, "DESCRIBE SELECT * FROM data");
   const sample = await queryDataset(csvPath, "SELECT * FROM data LIMIT 5");
   const count = await queryDataset(csvPath, "SELECT COUNT(*) AS n FROM data");
@@ -145,10 +156,13 @@ export async function describeDataset(csvPath: string): Promise<DatasetSchema> {
   };
 }
 
-/** Schema for every dataset in the workspace (for the agent's system prompt). */
-export async function describeWorkspace(sources: TableSource[], primaryPath: string): Promise<WorkspaceSchema> {
-  const tables: TableSchema[] = [];
-  const seen = new Set<string>(["data"]);
+/** Schema for every dataset in the workspace (for the agent's system prompt).
+ *  @param {TableSource[]} sources
+ *  @param {string} primaryPath
+ *  @returns {Promise<WorkspaceSchema>} */
+export async function describeWorkspace(sources, primaryPath) {
+  const tables = [];
+  const seen = new Set(["data"]);
   let primaryTable = "data";
   for (const s of sources) {
     let table = tableNameFor(s.name);
@@ -162,7 +176,7 @@ export async function describeWorkspace(sources: TableSource[], primaryPath: str
   return { tables, primaryTable };
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, conn?: DuckDBConnection): Promise<T> {
+function withTimeout(p, ms, conn) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => {
       // Actually stop the running query in the engine, not just reject the

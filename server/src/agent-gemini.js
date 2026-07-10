@@ -1,10 +1,6 @@
-import { GoogleGenAI, Type, FunctionCallingConfigMode, type Content, type FunctionDeclaration, type Part } from "@google/genai";
+import { GoogleGenAI, Type, FunctionCallingConfigMode } from "@google/genai";
 import { GEMINI_MODEL, MAX_AGENT_ITERATIONS } from "./config.js";
-import type { TableSource, WorkspaceSchema } from "./db.js";
 import {
-  type AgentEvent,
-  type AgentRunOptions,
-  type Exchange,
   SYSTEM_RULES,
   RUN_SQL_DESCRIPTION,
   schemaText,
@@ -14,18 +10,16 @@ import {
 } from "./agent-core.js";
 import { geminiPool } from "./keypool.js";
 
-function isRateLimit(err: unknown): boolean {
-  if ((err as { status?: number })?.status === 429) return true;
+function isRateLimit(err) {
+  if (err?.status === 429) return true;
   const msg = err instanceof Error ? err.message : String(err);
   return /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg);
 }
 
-type GenerateParams = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
-
 /** generateContent through the key pool: a 429 benches the key and the call
  *  retries on the next one, so quota failover is invisible to the caller. */
-async function generateWithFailover(params: GenerateParams) {
-  let lastErr: unknown = null;
+async function generateWithFailover(params) {
+  let lastErr = null;
   for (let attempt = 0; attempt < Math.max(1, geminiPool.size()); attempt++) {
     const key = geminiPool.next();
     if (!key) break;
@@ -42,11 +36,11 @@ async function generateWithFailover(params: GenerateParams) {
   );
 }
 
-/** Same agent loop as agent.ts, on Gemini's function-calling API. Emits the
+/** Same agent loop as agent-groq.js, on Gemini's function-calling API. Emits the
  *  identical AgentEvent stream, so the client can't tell providers apart.
  *  (Free tier: ~1,500 req/day on gemini-2.5-flash — plenty for demos.) */
 
-const RUN_SQL_DECL: FunctionDeclaration = {
+const RUN_SQL_DECL = {
   name: "run_sql",
   description: RUN_SQL_DESCRIPTION,
   parameters: {
@@ -58,17 +52,10 @@ const RUN_SQL_DECL: FunctionDeclaration = {
   },
 };
 
-export async function runGeminiAgent(
-  sources: TableSource[],
-  primaryPath: string,
-  ws: WorkspaceSchema,
-  question: string,
-  history: Exchange[],
-  emit: (e: AgentEvent) => void,
-  opts: AgentRunOptions = {},
-): Promise<void> {
-  const contents: Content[] = [
-    ...history.flatMap((h): Content[] => [
+/** @type {import("./agent-core.js").RunAgent} */
+export async function runGeminiAgent(sources, primaryPath, ws, question, history, emit, opts = {}) {
+  const contents = [
+    ...history.flatMap((h) => [
       { role: "user", parts: [{ text: h.question }] },
       { role: "model", parts: [{ text: historyAnswer(h) }] },
     ]),
@@ -111,9 +98,9 @@ export async function runGeminiAgent(
       return;
     }
 
-    const parts: Part[] = [];
+    const parts = [];
     for (const call of calls) {
-      const sql = String((call.args as { query?: unknown } | undefined)?.query ?? "");
+      const sql = String(call.args?.query ?? "");
       emit({ type: "tool_call", sql });
 
       const exec = await executeRunSql(sources, primaryPath, sql);

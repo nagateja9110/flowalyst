@@ -8,7 +8,7 @@ const FORBIDDEN = /\b(insert|update|delete|drop|alter|create|attach|detach|copy|
  * LLM-generated SQL is untrusted input. Only a single SELECT (or WITH ... SELECT)
  * statement is allowed; everything else is rejected before it reaches DuckDB.
  */
-export function validateSql(raw: string): string {
+export function validateSql(raw) {
   let sql = raw.trim().replace(/;+\s*$/, "");
   if (sql.includes(";")) {
     throw new UnsafeSqlError("Only a single statement is allowed.");
@@ -25,6 +25,6 @@ export function validateSql(raw: string): string {
 }
 
 /** Wrap the (validated) query so results are always bounded. */
-export function withLimit(sql: string, limit = DEFAULT_ROW_LIMIT): string {
+export function withLimit(sql, limit = DEFAULT_ROW_LIMIT) {
   return `SELECT * FROM (${sql}) AS flowalyst_result LIMIT ${limit}`;
 }

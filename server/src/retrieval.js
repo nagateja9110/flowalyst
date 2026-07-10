@@ -1,4 +1,3 @@
-import type { TableSource } from "./db.js";
 import { RETRIEVAL_TABLE_THRESHOLD, RETRIEVAL_TOP_K } from "./config.js";
 import { embedText, cosineSimilarity } from "./embeddings.js";
 
@@ -22,12 +21,13 @@ import { embedText, cosineSimilarity } from "./embeddings.js";
  * Fails open: any embedding error (no Gemini key, network issue) falls back
  * to sending every table unfiltered — a retrieval outage degrades to the
  * pre-retrieval behavior, it never blocks an answer.
+ *
+ * @param {string} question
+ * @param {import("./db.js").TableSource[]} allSources
+ * @param {string} primaryPath
+ * @returns {Promise<import("./db.js").TableSource[]>}
  */
-export async function selectRelevantTables(
-  question: string,
-  allSources: TableSource[],
-  primaryPath: string,
-): Promise<TableSource[]> {
+export async function selectRelevantTables(question, allSources, primaryPath) {
   if (allSources.length <= RETRIEVAL_TABLE_THRESHOLD) return allSources;
 
   try {
@@ -35,7 +35,7 @@ export async function selectRelevantTables(
 
     const scored = allSources
       .filter((s) => s.embedding)
-      .map((s) => ({ source: s, score: cosineSimilarity(questionVec, s.embedding!) }))
+      .map((s) => ({ source: s, score: cosineSimilarity(questionVec, s.embedding) }))
       .sort((a, b) => b.score - a.score);
 
     let selected = scored.slice(0, RETRIEVAL_TOP_K).map((s) => s.source);
@@ -50,6 +50,25 @@ export async function selectRelevantTables(
     if (!selected.some((s) => s.path === primaryPath)) {
       const primary = allSources.find((s) => s.path === primaryPath);
       if (primary) selected.push(primary);
+    }
+
+    // Pull in join partners pure semantic similarity can miss: a table that
+    // shares a foreign-key-shaped column (e.g. `product_id`) with a table
+    // already selected is very likely needed alongside it (observed case:
+    // "which customer spent the most money" selected orders+customers but not
+    // products, which holds the price column needed to compute spend — orders
+    // and products both have `product_id`, a strong join signal embeddings
+    // alone didn't surface). One pass only (not transitive), so this can't
+    // cascade into pulling in the whole workspace.
+    const selectedIdColumns = new Set(
+      selected.flatMap((s) => (s.schema?.columns ?? [])
+        .map((c) => c.name.toLowerCase())
+        .filter((n) => n.endsWith("_id"))),
+    );
+    for (const s of allSources) {
+      if (selected.includes(s)) continue;
+      const sharesIdColumn = (s.schema?.columns ?? []).some((c) => selectedIdColumns.has(c.name.toLowerCase()));
+      if (sharesIdColumn) selected.push(s);
     }
 
     console.log(

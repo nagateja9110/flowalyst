@@ -8,17 +8,20 @@ import "./config.js";
  * quota failover happens mid-conversation, invisible to the client.
  */
 export class KeyPool {
-  private cooldownUntil = new Map<string, number>();
-  private cursor = 0;
+  cooldownUntil = new Map();
+  cursor = 0;
 
-  constructor(private keys: string[], private cooldownMs = 60_000) {}
+  constructor(keys, cooldownMs = 60_000) {
+    this.keys = keys;
+    this.cooldownMs = cooldownMs;
+  }
 
-  size(): number {
+  size() {
     return this.keys.length;
   }
 
   /** Next key that isn't cooling down, round-robin. Null if all are benched. */
-  next(): string | null {
+  next() {
     const now = Date.now();
     for (let i = 0; i < this.keys.length; i++) {
       const key = this.keys[(this.cursor + i) % this.keys.length];
@@ -30,19 +33,19 @@ export class KeyPool {
     return null;
   }
 
-  cooldown(key: string): void {
+  cooldown(key) {
     this.cooldownUntil.set(key, Date.now() + this.cooldownMs);
   }
 
   /** Seconds until the soonest key becomes available again. */
-  secondsUntilAvailable(): number {
+  secondsUntilAvailable() {
     if (this.keys.length === 0) return Infinity;
     const soonest = Math.min(...this.keys.map((k) => this.cooldownUntil.get(k) ?? 0));
     return Math.max(0, Math.ceil((soonest - Date.now()) / 1000));
   }
 }
 
-function parseKeys(...envValues: (string | undefined)[]): string[] {
+function parseKeys(...envValues) {
   const keys = envValues
     .flatMap((v) => (v ?? "").split(","))
     .map((k) => k.trim())

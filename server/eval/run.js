@@ -10,19 +10,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SEED_DIR, provider } from "../src/config.js";
-import { describeWorkspace, type TableSource } from "../src/db.js";
+import { describeWorkspace } from "../src/db.js";
 import { runGroqAgent } from "../src/agent-groq.js";
 import { runGeminiAgent } from "../src/agent-gemini.js";
-import type { AgentEvent } from "../src/agent-core.js";
-
-interface GoldenCase {
-  question: string;
-  answer_regex: string;
-  concept: string;
-}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const cases: GoldenCase[] = JSON.parse(fs.readFileSync(path.join(__dirname, "golden.json"), "utf8"));
+const cases = JSON.parse(fs.readFileSync(path.join(__dirname, "golden.json"), "utf8"));
 
 const activeProvider = provider();
 if (!activeProvider) {
@@ -32,35 +25,34 @@ if (!activeProvider) {
 const runAgent = activeProvider === "gemini" ? runGeminiAgent : runGroqAgent;
 
 const seedCsv = path.join(SEED_DIR, "orders.csv");
-const sources: TableSource[] = [
+const sources = [
   { name: "orders", path: seedCsv },
   { name: "customers", path: path.join(SEED_DIR, "customers.csv") },
   { name: "products", path: path.join(SEED_DIR, "products.csv") },
 ];
 
-interface CaseResult {
-  status: "pass" | "fail" | "skip"; // skip = couldn't run (rate-limited), not a wrong answer
-  seconds: number;
-  sqlCalls: number;
-  answer: string;
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Free-tier Gemini allows ~10 requests/min and each question costs 2-3 requests,
 // so space the cases out; Groq's per-minute limits are looser.
 const CASE_DELAY_MS = activeProvider === "gemini" ? 25_000 : 0;
 
-/** A rate-limit / quota error is an infrastructure problem, not a wrong answer —
- *  distinguished from logic failures so the pass-rate reflects correctness. */
-const isRateLimited = (answer: string) =>
-  /\b429\b|RESOURCE_EXHAUSTED|quota|rate-?limited/i.test(answer);
+/** A rate-limit, quota, or transient network error is an infrastructure
+ *  problem, not a wrong answer — distinguished from logic failures so the
+ *  pass-rate reflects correctness, not how hard the test suite has been
+ *  hammering the free tier. "fetch failed" is Node's generic error for a
+ *  dropped connection/DNS hiccup, which shows up right alongside real 429s
+ *  when a key pool is fully exhausted (the failure happens before the
+ *  response body — with a status code — ever comes back). */
+const isRateLimited = (answer) =>
+  /\b429\b|RESOURCE_EXHAUSTED|quota|rate-?limited|fetch failed/i.test(answer);
 
-async function runCase(c: GoldenCase): Promise<CaseResult> {
+/** status: "pass" | "fail" | "skip" (skip = couldn't run / rate-limited, not a wrong answer) */
+async function runCase(c) {
   const ws = await describeWorkspace(sources, seedCsv);
   let answer = "";
   let sqlCalls = 0;
   const start = Date.now();
-  const emit = (e: AgentEvent) => {
+  const emit = (e) => {
     if (e.type === "text") answer += e.delta;
     if (e.type === "tool_call") sqlCalls++;
   };
@@ -79,7 +71,7 @@ console.log(`Provider: ${activeProvider}\nDataset:  ${sources.map((s) => s.name)
 
 let passed = 0;
 let skipped = 0;
-const failures: { c: GoldenCase; r: CaseResult }[] = [];
+const failures = [];
 
 for (let i = 0; i < cases.length; i++) {
   const c = cases[i];

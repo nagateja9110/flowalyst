@@ -1,15 +1,6 @@
 import Groq from "groq-sdk";
-import type {
-  ChatCompletionCreateParamsNonStreaming,
-  ChatCompletionMessageParam,
-  ChatCompletionTool,
-} from "groq-sdk/resources/chat/completions";
 import { GROQ_MODEL, MAX_AGENT_ITERATIONS } from "./config.js";
-import type { TableSource, WorkspaceSchema } from "./db.js";
 import {
-  type AgentEvent,
-  type AgentRunOptions,
-  type Exchange,
   SYSTEM_RULES,
   RUN_SQL_DESCRIPTION,
   schemaText,
@@ -19,11 +10,11 @@ import {
 } from "./agent-core.js";
 import { groqPool } from "./keypool.js";
 
-/** Same agent loop as agent-gemini.ts, on Groq's OpenAI-style tool calling.
+/** Same agent loop as agent-gemini.js, on Groq's OpenAI-style tool calling.
  *  Emits the identical AgentEvent stream, so the client can't tell providers
  *  apart. (Free tier is per key/day — the pool spreads load across keys.) */
 
-const RUN_SQL_TOOL: ChatCompletionTool = {
+const RUN_SQL_TOOL = {
   type: "function",
   function: {
     name: "run_sql",
@@ -38,8 +29,8 @@ const RUN_SQL_TOOL: ChatCompletionTool = {
   },
 };
 
-function isRateLimit(err: unknown): boolean {
-  if ((err as { status?: number })?.status === 429) return true;
+function isRateLimit(err) {
+  if (err?.status === 429) return true;
   const msg = err instanceof Error ? err.message : String(err);
   return /\b429\b|rate.?limit|quota/i.test(msg);
 }
@@ -49,20 +40,18 @@ function isRateLimit(err: unknown): boolean {
  *  non-deterministic, so re-rolling the same request usually yields valid JSON.
  *  Forcing tool_choice:"required" (for grounding) makes this more frequent, so
  *  the retry is what keeps that guarantee from turning into hard failures. */
-function isToolUseFailed(err: unknown): boolean {
+function isToolUseFailed(err) {
   const msg = err instanceof Error ? err.message : String(err);
   return /tool_use_failed/i.test(msg);
 }
 
 const MAX_TOOL_RETRIES = 4;
 
-type ChatParams = ChatCompletionCreateParamsNonStreaming;
-
 /** chat.completions through the key pool: a 429 benches the key and moves to the
  *  next; a malformed-tool-call 400 re-rolls on the same key. Both are invisible
  *  to the caller. */
-async function completeWithFailover(params: ChatParams) {
-  let lastErr: unknown = null;
+async function completeWithFailover(params) {
+  let lastErr = null;
   for (let attempt = 0; attempt < Math.max(1, groqPool.size()); attempt++) {
     const key = groqPool.next();
     if (!key) break;
@@ -82,18 +71,11 @@ async function completeWithFailover(params: ChatParams) {
   );
 }
 
-export async function runGroqAgent(
-  sources: TableSource[],
-  primaryPath: string,
-  ws: WorkspaceSchema,
-  question: string,
-  history: Exchange[],
-  emit: (e: AgentEvent) => void,
-  opts: AgentRunOptions = {},
-): Promise<void> {
-  const messages: ChatCompletionMessageParam[] = [
+/** @type {import("./agent-core.js").RunAgent} */
+export async function runGroqAgent(sources, primaryPath, ws, question, history, emit, opts = {}) {
+  const messages = [
     { role: "system", content: `${SYSTEM_RULES}\n\n${schemaText(ws)}` },
-    ...history.flatMap((h): ChatCompletionMessageParam[] => [
+    ...history.flatMap((h) => [
       { role: "user", content: h.question },
       { role: "assistant", content: historyAnswer(h) },
     ]),
@@ -131,7 +113,7 @@ export async function runGroqAgent(
     for (const call of calls) {
       let sql = "";
       try {
-        sql = String((JSON.parse(call.function.arguments || "{}") as { query?: unknown }).query ?? "");
+        sql = String(JSON.parse(call.function.arguments || "{}").query ?? "");
       } catch {
         sql = "";
       }

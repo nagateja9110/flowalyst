@@ -29,20 +29,21 @@ export const MAX_AGENT_ITERATIONS = 6;
 export const QUERY_TIMEOUT_MS = 10_000;
 export const DEFAULT_ROW_LIMIT = 1000;
 
-// Retrieval-augmented table selection (see retrieval.ts). Below this many
+// Retrieval-augmented table selection (see retrieval.js). Below this many
 // datasets, every schema goes into the prompt unfiltered — there's nothing
 // worth filtering with only a handful of tables. Above it, only the top
 // RETRIEVAL_TOP_K tables by embedding similarity to the question are sent.
 export const RETRIEVAL_TABLE_THRESHOLD = 4;
 export const RETRIEVAL_TOP_K = 3;
 
-export type Provider = "gemini" | "groq";
+/** @typedef {"gemini" | "groq"} Provider */
 
 /** Which LLM powers the agent. PROVIDER env forces one; otherwise Gemini wins
  *  if its keys are set (live-verified path), Groq is the fallback provider,
  *  and null means manual-SQL-only mode. Both providers read key POOLS
- *  (GEMINI_API_KEYS / GROQ_API_KEYS, comma-separated) with 429 failover. */
-export function provider(): Provider | null {
+ *  (GEMINI_API_KEYS / GROQ_API_KEYS, comma-separated) with 429 failover.
+ *  @returns {Provider | null} */
+export function provider() {
   const forced = process.env.PROVIDER;
   if (forced === "gemini" || forced === "groq") return forced;
   if (process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS) return "gemini";

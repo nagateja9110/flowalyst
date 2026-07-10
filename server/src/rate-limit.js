@@ -1,5 +1,3 @@
-import type { Request, Response, NextFunction } from "express";
-
 /**
  * Per-IP token bucket. Each IP has a bucket of `capacity` tokens that refills at
  * `refillPerSec`; every request spends one. Empty bucket → 429 with Retry-After.
@@ -8,15 +6,13 @@ import type { Request, Response, NextFunction } from "express";
  * `capacity` while still bounding the sustained rate — no thundering edge at the
  * window boundary. In-memory + per-instance, which is fine for a single service;
  * a multi-instance deploy would move this state to Redis.
+ *
+ * Bucket shape: { tokens: number, last: number (ms timestamp of last refill) }
  */
-interface Bucket {
-  tokens: number;
-  last: number; // ms timestamp of last refill
-}
 
-export function rateLimit(opts: { capacity: number; refillPerSec: number; name: string }) {
+export function rateLimit(opts) {
   const { capacity, refillPerSec } = opts;
-  const buckets = new Map<string, Bucket>();
+  const buckets = new Map();
 
   // Evict idle buckets every 5 min so the map can't grow unbounded.
   const sweep = setInterval(() => {
@@ -25,7 +21,7 @@ export function rateLimit(opts: { capacity: number; refillPerSec: number; name: 
   }, 5 * 60_000);
   sweep.unref?.();
 
-  return (req: Request, res: Response, next: NextFunction) => {
+  return (req, res, next) => {
     const ip = req.ip ?? "unknown";
     const now = Date.now();
     const b = buckets.get(ip) ?? { tokens: capacity, last: now };
