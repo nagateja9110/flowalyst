@@ -15,10 +15,6 @@ import { QUERY_TIMEOUT_MS } from "./config.js";
  * @property {DatasetSchema} [schema] Precomputed schema (from the manifest
  *   cache). If present, describeWorkspace uses it instead of re-introspecting
  *   the file.
- * @property {number[]} [embedding] Precomputed embedding vector (from the
- *   manifest cache), used by retrieval.js to rank table relevance without
- *   re-embedding on every request — only the question itself is embedded per
- *   request.
  */
 
 /** Dataset name → SQL identifier (lowercase, safe chars, no leading digit). */

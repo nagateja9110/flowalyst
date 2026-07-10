@@ -5,14 +5,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PORT, UPLOADS_DIR, hasApiKey, provider } from "./config.js";
 import {
-  ensureDirs, registerSeeds, listDatasets, getDataset, registerDataset, deleteDataset,
-  saveDatasetSchema, ensureAllSchemas, saveDatasetEmbedding, ensureAllEmbeddings,
+  ensureDirs, registerSeeds, listDatasets, listDomains, getDataset, registerDataset, deleteDataset,
+  saveDatasetSchema, ensureAllSchemas, ensureAllDomains,
 } from "./datasets.js";
 import { describeDataset, describeWorkspace, queryWorkspace, SUPPORTED_EXTENSIONS } from "./db.js";
 import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
 import { rateLimit } from "./rate-limit.js";
-import { embedText, datasetDocument } from "./embeddings.js";
-import { selectRelevantTables } from "./retrieval.js";
 import { geminiPool, groqPool } from "./keypool.js";
 import { runGroqAgent } from "./agent-groq.js";
 import { runGeminiAgent } from "./agent-gemini.js";
@@ -49,8 +47,8 @@ function isPoolExhausted(providerName) {
 
 ensureDirs();
 registerSeeds();
-await ensureAllSchemas();    // compute + cache schemas once, so /api/ask never re-introspects
-await ensureAllEmbeddings(); // compute + cache embeddings once, for RAG table retrieval (retrieval.js)
+ensureAllDomains();       // backfill domain on pre-domain-folder manifest entries
+await ensureAllSchemas(); // compute + cache schemas once, so /api/ask never re-introspects
 
 const app = express();
 app.set("trust proxy", 1); // behind Render's proxy: req.ip reflects X-Forwarded-For
@@ -76,6 +74,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.get("/api/config", (_req, res) => res.json({ hasApiKey: hasApiKey(), provider: provider() }));
 
 app.get("/api/datasets", (_req, res) => res.json(listDatasets()));
+app.get("/api/domains", (_req, res) => res.json(listDomains()));
 
 app.post("/api/datasets", uploadLimiter, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded (field name: file)" });
@@ -84,22 +83,14 @@ app.post("/api/datasets", uploadLimiter, upload.single("file"), async (req, res)
     return res.status(400).json({ error: `Unsupported file type. Supported: ${SUPPORTED_EXTENSIONS.join(", ")}` });
   }
   const name = req.body.name || req.file.originalname.replace(/\.[^.]+$/, "");
-  const dataset = registerDataset(name, req.file.path);
-  let schema;
+  const domain = req.body.domain || undefined;
+  const dataset = registerDataset(name, req.file.path, domain);
   try {
     // Validate the CSV parses, and cache the schema in the same pass.
-    schema = await describeDataset(dataset.path);
+    const schema = await describeDataset(dataset.path);
     saveDatasetSchema(dataset.id, schema);
   } catch (err) {
     return res.status(400).json({ error: `Could not parse CSV: ${err instanceof Error ? err.message : err}` });
-  }
-  try {
-    // Non-fatal: embedding failure (e.g. no Gemini key) just leaves this
-    // dataset unranked for retrieval — it's still fully usable.
-    const embedding = await embedText(datasetDocument(name, schema));
-    saveDatasetEmbedding(dataset.id, embedding);
-  } catch (err) {
-    console.warn(`Could not embed dataset ${dataset.id} for retrieval:`, err instanceof Error ? err.message : err);
   }
   res.status(201).json(dataset);
 });
@@ -120,18 +111,24 @@ app.delete("/api/datasets/:id", (req, res) => {
   res.status(204).end();
 });
 
-function allSources() {
-  return listDatasets().map((d) => ({ name: d.name, path: d.path, schema: d.schema, embedding: d.embedding }));
+// Only datasets filed under the same domain as `domain` are ever returned —
+// a hard boundary, so two same-named tables in different domains (e.g. two
+// "users" tables) can never be ambiguous or cross-contaminate a workspace.
+function sourcesInDomain(domain) {
+  return listDatasets()
+    .filter((d) => d.domain === domain)
+    .map((d) => ({ name: d.name, path: d.path, schema: d.schema }));
 }
 
-// Raw SQL endpoint — also the no-API-key fallback path. Every dataset is a
-// named view; `data` aliases the dataset in the URL, so JOINs work here too.
+// Raw SQL endpoint — also the no-API-key fallback path. Every dataset in the
+// same domain is a named view; `data` aliases the dataset in the URL, so
+// JOINs work here too (scoped to that domain only).
 app.post("/api/datasets/:id/query", queryLimiter, async (req, res) => {
   const dataset = getDataset(String(req.params.id));
   if (!dataset) return res.status(404).json({ error: "Dataset not found" });
   const sql = String(req.body?.sql ?? "");
   try {
-    const result = await queryWorkspace(allSources(), dataset.path, withLimit(validateSql(sql)));
+    const result = await queryWorkspace(sourcesInDomain(dataset.domain), dataset.path, withLimit(validateSql(sql)));
     res.json({ sql, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -187,10 +184,9 @@ app.post("/api/ask", askLimiter, async (req, res) => {
   }
 
   try {
-    const allDatasets = allSources();
-    // RAG table selection: no-op below the threshold; above it, only the
-    // top-K tables by embedding similarity to the question go to the agent.
-    const sources = await selectRelevantTables(question, allDatasets, dataset.path);
+    // Scoped to the selected dataset's domain — every table in that domain
+    // goes to the agent, nothing outside it ever does.
+    const sources = sourcesInDomain(dataset.domain);
     const ws = await describeWorkspace(sources, dataset.path);
 
     for (let i = 0; i < providers.length; i++) {

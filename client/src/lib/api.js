@@ -6,9 +6,14 @@ export async function fetchDatasets() {
   return (await fetch("/api/datasets")).json();
 }
 
-export async function uploadDataset(file) {
+export async function fetchDomains() {
+  return (await fetch("/api/domains")).json();
+}
+
+export async function uploadDataset(file, domain) {
   const form = new FormData();
   form.append("file", file);
+  if (domain) form.append("domain", domain);
   const res = await fetch("/api/datasets", { method: "POST", body: form });
   if (!res.ok) throw new Error((await res.json()).error ?? "Upload failed");
   return res.json();

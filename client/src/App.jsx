@@ -1,15 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchConfig, fetchDatasets, fetchSchema, uploadDataset, deleteDataset } from "./lib/api";
+import { fetchConfig, fetchDatasets, fetchDomains, fetchSchema, uploadDataset, deleteDataset } from "./lib/api";
 import { Chat } from "./components/Chat";
+
+const NEW_DOMAIN = "__new__";
 
 export default function App() {
   const [datasets, setDatasets] = useState([]);
+  const [domains, setDomains] = useState([]);
   const [selected, setSelected] = useState(null);
   const [schema, setSchema] = useState(null);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [provider, setProvider] = useState(null);
   const [uploadError, setUploadError] = useState(null);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [domainChoice, setDomainChoice] = useState("");
+  const [newDomainName, setNewDomainName] = useState("");
+  const [collapsedDomains, setCollapsedDomains] = useState(() => new Set());
   const fileRef = useRef(null);
+
+  function toggleDomain(domain) {
+    setCollapsedDomains((prev) => {
+      const next = new Set(prev);
+      if (next.has(domain)) next.delete(domain);
+      else next.add(domain);
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetchConfig().then((c) => {
@@ -20,6 +36,7 @@ export default function App() {
       setDatasets(ds);
       if (ds.length > 0) setSelected(ds[0].id);
     });
+    fetchDomains().then(setDomains);
   }, []);
 
   useEffect(() => {
@@ -36,17 +53,60 @@ export default function App() {
       if (selected === id) setSelected(remaining[0]?.id ?? null);
       return remaining;
     });
+    fetchDomains().then(setDomains); // a domain can disappear once its last dataset is gone
   }
 
-  async function onUpload(file) {
+  function pickFile(file) {
+    setUploadError(null);
+    setPendingFile(file);
+    setDomainChoice(domains[0] ?? NEW_DOMAIN);
+    setNewDomainName("");
+  }
+
+  function cancelUpload() {
+    setPendingFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function confirmUpload() {
+    const domain = domainChoice === NEW_DOMAIN ? newDomainName.trim() : domainChoice;
+    if (!domain) {
+      setUploadError("Pick or name a domain first.");
+      return;
+    }
     setUploadError(null);
     try {
-      const d = await uploadDataset(file);
+      const d = await uploadDataset(pendingFile, domain);
       setDatasets((ds) => [...ds, d]);
       setSelected(d.id);
+      setPendingFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+      fetchDomains().then(setDomains);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  const groups = new Map();
+  for (const d of datasets) {
+    const domain = d.domain || "General";
+    if (!groups.has(domain)) groups.set(domain, []);
+    groups.get(domain).push(d);
+  }
+
+  // The folder (domain) currently being queried is just the selected
+  // dataset's domain — picking a different folder jumps to its first table.
+  const currentDataset = datasets.find((d) => d.id === selected);
+  const currentDomain = currentDataset?.domain ?? "";
+
+  function onFolderChange(domain) {
+    const first = groups.get(domain)?.[0];
+    if (first) setSelected(first.id);
+    setCollapsedDomains((prev) => {
+      const next = new Set(prev);
+      next.delete(domain); // jumping into a folder should reveal its tables
+      return next;
+    });
   }
 
   return (
@@ -84,40 +144,109 @@ export default function App() {
               type="file"
               accept=".csv"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])}
+              onChange={(e) => e.target.files?.[0] && pickFile(e.target.files[0])}
             />
+
+            {pendingFile && (
+              <div className="mt-2 space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-2">
+                <div className="truncate text-xs text-zinc-400">{pendingFile.name}</div>
+                <select
+                  value={domainChoice}
+                  onChange={(e) => setDomainChoice(e.target.value)}
+                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-emerald-600"
+                >
+                  {domains.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                  <option value={NEW_DOMAIN}>+ New domain…</option>
+                </select>
+                {domainChoice === NEW_DOMAIN && (
+                  <input
+                    value={newDomainName}
+                    onChange={(e) => setNewDomainName(e.target.value)}
+                    placeholder="Domain name"
+                    className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-emerald-600"
+                  />
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmUpload}
+                    className="flex-1 rounded bg-emerald-600 px-2 py-1 text-xs font-medium hover:bg-emerald-500"
+                  >
+                    Upload
+                  </button>
+                  <button
+                    onClick={cancelUpload}
+                    className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             {uploadError && <div className="mt-2 text-xs text-rose-400">{uploadError}</div>}
           </div>
 
-          <div className="p-3">
-            <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Datasets</div>
-            {datasets.map((d) => (
-              <div
-                key={d.id}
-                className={`group mb-1 flex items-center rounded-md text-sm ${
-                  selected === d.id ? "bg-emerald-900/40 text-emerald-200" : "text-zinc-300 hover:bg-zinc-900"
-                }`}
+          {domains.length > 0 && (
+            <div className="border-b border-zinc-800 p-3">
+              <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Folder to query</div>
+              <select
+                value={currentDomain}
+                onChange={(e) => onFolderChange(e.target.value)}
+                className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200 outline-none focus:border-emerald-600"
               >
-                <button
-                  onClick={() => setSelected(d.id)}
-                  className="flex-1 truncate px-2 py-1.5 text-left"
-                >
-                  {d.name}
-                </button>
-                <button
-                  onClick={() => onDelete(d.id)}
-                  title="Delete dataset"
-                  className="px-2 py-1.5 text-zinc-600 opacity-0 hover:text-rose-400 group-hover:opacity-100"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                {domains.map((d) => (
+                  <option key={d} value={d}>{d} ({groups.get(d)?.length ?? 0})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {[...groups.entries()].map(([domain, ds]) => {
+              // The active folder (whatever's currently being queried) always
+              // shows its tables — collapsing only applies to the others.
+              const collapsed = collapsedDomains.has(domain) && domain !== currentDomain;
+              return (
+                <div key={domain} className="mb-3">
+                  <button
+                    onClick={() => toggleDomain(domain)}
+                    className="mb-1 flex w-full items-center gap-1 text-xs uppercase tracking-wide text-zinc-500 hover:text-zinc-300"
+                  >
+                    <span className="inline-block w-3">{collapsed ? "▸" : "▾"}</span>
+                    {domain}
+                    <span className="text-zinc-600">({ds.length})</span>
+                  </button>
+                  {!collapsed && ds.map((d) => (
+                    <div
+                      key={d.id}
+                      className={`group mb-1 flex items-center rounded-md text-sm ${
+                        selected === d.id ? "bg-emerald-900/40 text-emerald-200" : "text-zinc-300 hover:bg-zinc-900"
+                      }`}
+                    >
+                      <button
+                        onClick={() => setSelected(d.id)}
+                        className="flex-1 truncate px-2 py-1.5 text-left"
+                      >
+                        {d.name}
+                      </button>
+                      <button
+                        onClick={() => onDelete(d.id)}
+                        title="Delete dataset"
+                        className="px-2 py-1.5 text-zinc-600 opacity-0 hover:text-rose-400 group-hover:opacity-100"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
             {datasets.length === 0 && <div className="text-xs text-zinc-600">No datasets yet</div>}
           </div>
 
           {schema && (
-            <div className="min-h-0 flex-1 overflow-y-auto border-t border-zinc-800 p-3">
+            <div className="max-h-64 min-h-0 shrink-0 overflow-y-auto border-t border-zinc-800 p-3">
               <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">
                 Schema · {schema.rowCount.toLocaleString()} rows
               </div>

@@ -1,0 +1,9 @@
+user_id,username,email,signup_date,subscription_tier,country
+1,cinephile42,arjun.rao@example.com,2024-11-02,Premium,India
+2,popcornfan,divya.nair@example.com,2025-01-15,Basic,India
+3,nightowl99,karan.mehta@example.com,2024-08-30,Premium,USA
+4,reelwatcher,sneha.iyer@example.com,2025-03-10,Standard,UK
+5,filmbuff88,vikram.das@example.com,2024-12-05,Basic,India
+6,screentime,pooja.rao@example.com,2025-02-18,Premium,Canada
+7,lateshow,rahul.gupta@example.com,2024-09-22,Standard,India
+8,binger007,ishita.shah@example.com,2025-04-01,Basic,USA
