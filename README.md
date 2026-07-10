@@ -63,8 +63,10 @@ Fail-closed by design: a rare legitimate query being rejected is acceptable; a d
 
 **Also in the box:**
 
+- **Domain folders** — datasets are grouped into named domains (e.g. "E-commerce", "Movies"); a question only ever sees the tables in the domain you're querying. Two unrelated tables can share a name (two different `users` tables, say) with zero risk of the wrong one being pulled in — the boundary is structural, not a best-effort ranking.
+- **Live agent trace** — every SQL attempt streams to the screen as it happens, narrated with what the agent is doing between calls ("writing a SQL query", "that query failed — writing a corrected query"), not just a spinner.
 - **Follow-up questions** — prior Q/A pairs (capped at 8) ride along with each ask; "now break that down by gender" just works.
-- **Multi-table JOINs** — every uploaded dataset is a named view in the per-request DuckDB instance; the agent sees all schemas.
+- **Multi-table JOINs** — every dataset in the active domain is a named view in the per-request DuckDB instance; the agent sees all their schemas.
 - **Provider-agnostic core** — Gemini and Groq agents emit the same event stream from shared core logic (`agent-core.js`); swapping providers is a config change, not a UI change. An API-key pool round-robins keys and benches any key that hits a rate limit, failing over mid-conversation.
 - **Graceful degradation** — with no API key at all, the same chat box accepts raw SQL and still renders the table + chart.
 
@@ -93,7 +95,13 @@ npm install --prefix client
 npm run dev                      # server on :5002, client on :5173
 ```
 
-Three seed datasets from one e-commerce domain register automatically — `customers`, `orders`, and `products`, linked by `customer_id`/`product_id` so JOIN questions work out of the box. Try:
+Seven seed datasets across three domains register automatically — pick a domain from the "Folder to query" dropdown in the sidebar:
+
+- **E-commerce** — `customers`, `orders`, `products`, `users` (site accounts), linked by `customer_id`/`product_id` so JOIN questions work out of the box.
+- **Movies** — `movies`, `users` (streaming subscribers).
+- **HR** — `employees`.
+
+The two `users` tables are deliberate: same name, completely different schemas, different domains — proof that picking a domain is a hard boundary, not a guess. Try:
 
 > *"Which city generated the most revenue from delivered orders?"*
 > *"Which product category has the highest return rate?"*
@@ -113,11 +121,12 @@ GROUP BY 1 ORDER BY 2 DESC
 
 | Route | Purpose |
 |---|---|
-| `POST /api/datasets` | Upload a CSV (multipart, field `file`) |
+| `POST /api/datasets` | Upload a CSV (multipart, field `file`, optional field `domain`) |
 | `GET /api/datasets` | List datasets |
+| `GET /api/domains` | List domain names currently in use |
 | `GET /api/datasets/:id/schema` | Columns, types, sample rows, row count |
-| `POST /api/datasets/:id/query` | Raw SQL (guarded) — also the no-key fallback path |
-| `POST /api/ask` | `{datasetId, question}` → SSE agent stream |
+| `POST /api/datasets/:id/query` | Raw SQL (guarded), scoped to the dataset's domain — also the no-key fallback path |
+| `POST /api/ask` | `{datasetId, question}` → SSE agent stream, scoped to the dataset's domain |
 | `GET /api/config` | `{hasApiKey}` — client picks agent vs manual mode |
 
 ## Evals
@@ -131,7 +140,7 @@ PROVIDER=groq npm run eval --prefix server         # compare providers
 
 `server/eval/golden.json` holds questions with regex expectations (including an honesty case asking about a column that doesn't exist — the correct answer is "the data can't tell you"). Each case is scored **pass / fail / skip**, where `skip` = couldn't run because of a rate limit (infrastructure), so it never counts as a wrong answer. The runner prints latency and SQL-call count per question, self-paces on Gemini's free-tier rate limit, and exits non-zero only on real logic failures.
 
-Latest run (e-commerce seed, 9 cases): **Gemini 9/9, Groq (llama-3.3-70b) 8/9**. The eval earned its keep — it caught a self-inflicted regression (forcing a first-turn tool call made Llama emit malformed tool-call syntax that Groq rejected; fixed by re-rolling on `tool_use_failed`), a semantic bug (a model ranking return *count* instead of *rate*; fixed with a general prompt rule), and a genuine capability gap (on "average delivery time" — a metric the data can't support — Gemini declines, while the weaker Llama fabricates it from unrelated date columns). That last one is left as-is: forcing a weaker model to pass it would be overfitting the metric.
+Latest run (e-commerce seed, 13 cases): **Gemini 13/13, Groq (llama-3.3-70b) 11/13**. The eval earned its keep — it caught a self-inflicted regression (forcing a first-turn tool call made Llama emit malformed tool-call syntax that Groq rejected; fixed by re-rolling on `tool_use_failed`), a semantic bug (a model ranking return *count* instead of *rate*; fixed with a general prompt rule), and a genuine capability gap (on "average delivery time" — a metric the data can't support — Gemini declines, while the weaker Llama fabricates it from unrelated date columns). That last one is left as-is: forcing a weaker model to pass it would be overfitting the metric.
 
 ## Project structure
 
@@ -144,9 +153,7 @@ server/src/
   guardrails.js   SELECT-only validation + LIMIT wrapping
   db.js           DuckDB per-request instances, schema inference
   keypool.js      round-robin API keys with 429 cooldown failover
-  datasets.js     upload manifest + seed registration
-  embeddings.js   Gemini embeddings + cosine similarity
-  retrieval.js    RAG table selection for many-dataset workspaces
+  datasets.js     upload manifest, domain assignment, seed registration
 server/eval/
   golden.json     golden question set
   run.js          eval runner (accuracy / latency / SQL calls)
@@ -159,7 +166,7 @@ client/src/
 
 ## Example questions to try
 
-The seed data is a small e-commerce domain — `customers`, `products`, and `orders` — built for JOINs. Try these in the chat, roughly in order of ambition:
+The E-commerce domain — `customers`, `products`, `orders`, `users` — is built for JOINs. Try these in the chat, roughly in order of ambition:
 
 1. **How many orders do we have, and how many were delivered vs cancelled?** — basic grounding: the answer comes from executed rows, not the model's memory.
 2. **Show total revenue by product category.** — revenue isn't a column; the agent joins `orders` × `products` and computes `quantity * price`, then auto-renders a bar chart.
