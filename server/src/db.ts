@@ -13,6 +13,10 @@ export interface TableSource {
   /** Precomputed schema (from the manifest cache). If present, describeWorkspace
    *  uses it instead of re-introspecting the file. */
   schema?: DatasetSchema;
+  /** Precomputed embedding vector (from the manifest cache), used by
+   *  retrieval.ts to rank table relevance without re-embedding on every
+   *  request — only the question itself is embedded per request. */
+  embedding?: number[];
 }
 
 /** Dataset name → SQL identifier (lowercase, safe chars, no leading digit). */

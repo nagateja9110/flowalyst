@@ -4,17 +4,23 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PORT, UPLOADS_DIR, hasApiKey, provider } from "./config.js";
-import { ensureDirs, registerSeeds, listDatasets, getDataset, registerDataset, deleteDataset, saveDatasetSchema, ensureAllSchemas } from "./datasets.js";
+import {
+  ensureDirs, registerSeeds, listDatasets, getDataset, registerDataset, deleteDataset,
+  saveDatasetSchema, ensureAllSchemas, saveDatasetEmbedding, ensureAllEmbeddings,
+} from "./datasets.js";
 import { describeDataset, describeWorkspace, queryWorkspace, SUPPORTED_EXTENSIONS, type TableSource } from "./db.js";
 import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
 import { rateLimit } from "./rate-limit.js";
+import { embedText, datasetDocument } from "./embeddings.js";
+import { selectRelevantTables } from "./retrieval.js";
 import type { AgentEvent, Exchange, RunAgent } from "./agent-core.js";
 import { runGroqAgent } from "./agent-groq.js";
 import { runGeminiAgent } from "./agent-gemini.js";
 
 ensureDirs();
 registerSeeds();
-await ensureAllSchemas(); // compute + cache schemas once, so /api/ask never re-introspects
+await ensureAllSchemas();    // compute + cache schemas once, so /api/ask never re-introspects
+await ensureAllEmbeddings(); // compute + cache embeddings once, for RAG table retrieval (retrieval.ts)
 
 const app = express();
 app.set("trust proxy", 1); // behind Render's proxy: req.ip reflects X-Forwarded-For
@@ -49,12 +55,21 @@ app.post("/api/datasets", uploadLimiter, upload.single("file"), async (req, res)
   }
   const name = (req.body.name as string) || req.file.originalname.replace(/\.[^.]+$/, "");
   const dataset = registerDataset(name, req.file.path);
+  let schema;
   try {
     // Validate the CSV parses, and cache the schema in the same pass.
-    const schema = await describeDataset(dataset.path);
+    schema = await describeDataset(dataset.path);
     saveDatasetSchema(dataset.id, schema);
   } catch (err) {
     return res.status(400).json({ error: `Could not parse CSV: ${err instanceof Error ? err.message : err}` });
+  }
+  try {
+    // Non-fatal: embedding failure (e.g. no Gemini key) just leaves this
+    // dataset unranked for retrieval — it's still fully usable.
+    const embedding = await embedText(datasetDocument(name, schema));
+    saveDatasetEmbedding(dataset.id, embedding);
+  } catch (err) {
+    console.warn(`Could not embed dataset ${dataset.id} for retrieval:`, err instanceof Error ? err.message : err);
   }
   res.status(201).json(dataset);
 });
@@ -76,7 +91,7 @@ app.delete("/api/datasets/:id", (req, res) => {
 });
 
 function allSources(): TableSource[] {
-  return listDatasets().map((d) => ({ name: d.name, path: d.path, schema: d.schema }));
+  return listDatasets().map((d) => ({ name: d.name, path: d.path, schema: d.schema, embedding: d.embedding }));
 }
 
 // Raw SQL endpoint — also the no-API-key fallback path. Every dataset is a
@@ -136,7 +151,10 @@ app.post("/api/ask", askLimiter, async (req, res) => {
   }
 
   try {
-    const sources = allSources();
+    const allDatasets = allSources();
+    // RAG table selection: no-op below the threshold; above it, only the
+    // top-K tables by embedding similarity to the question go to the agent.
+    const sources = await selectRelevantTables(question, allDatasets, dataset.path);
     const ws = await describeWorkspace(sources, dataset.path);
     const runAgent: RunAgent = activeProvider === "gemini" ? runGeminiAgent : runGroqAgent;
     await runAgent(sources, dataset.path, ws, question, exchanges, emit, { isAborted: () => aborted });

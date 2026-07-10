@@ -24,9 +24,17 @@ export const SEED_DIR = path.join(REPO_DATA, "seed");
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 export const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "gemini-embedding-001";
 export const MAX_AGENT_ITERATIONS = 6;
 export const QUERY_TIMEOUT_MS = 10_000;
 export const DEFAULT_ROW_LIMIT = 1000;
+
+// Retrieval-augmented table selection (see retrieval.ts). Below this many
+// datasets, every schema goes into the prompt unfiltered — there's nothing
+// worth filtering with only a handful of tables. Above it, only the top
+// RETRIEVAL_TOP_K tables by embedding similarity to the question are sent.
+export const RETRIEVAL_TABLE_THRESHOLD = 4;
+export const RETRIEVAL_TOP_K = 3;
 
 export type Provider = "gemini" | "groq";
 

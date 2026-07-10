@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { MANIFEST_PATH, UPLOADS_DIR, SEED_DIR } from "./config.js";
 import { describeDataset, type DatasetSchema } from "./db.js";
+import { embedText, datasetDocument } from "./embeddings.js";
 
 export interface Dataset {
   id: string;
@@ -13,6 +14,10 @@ export interface Dataset {
   /** Column/sample/row-count schema, computed once at upload and cached here so
    *  /api/ask doesn't re-introspect every CSV on every request. */
   schema?: DatasetSchema;
+  /** Embedding of the table's name/columns/sample values, computed once and
+   *  cached here so RAG table retrieval (see retrieval.ts) only has to embed
+   *  the incoming question, not every dataset, on each request. */
+  embedding?: number[];
 }
 
 function readManifest(): Dataset[] {
@@ -84,6 +89,36 @@ export async function ensureAllSchemas(): Promise<void> {
       saveDatasetSchema(d.id, schema);
     } catch {
       /* unreadable file — leave uncached; describeWorkspace will surface it */
+    }
+  }
+}
+
+/** Persist a computed embedding onto a dataset in the manifest. */
+export function saveDatasetEmbedding(id: string, embedding: number[]): void {
+  const datasets = readManifest();
+  const d = datasets.find((x) => x.id === id);
+  if (!d) return;
+  d.embedding = embedding;
+  writeManifest(datasets);
+}
+
+/** Compute + cache an embedding for any dataset that has a schema but no
+ *  embedding yet. Requires Gemini (no Groq equivalent) — if it's unavailable
+ *  for any dataset, that dataset is simply left uncached; retrieval.ts treats
+ *  an unranked table as "include it" rather than "exclude it". */
+export async function ensureAllEmbeddings(): Promise<void> {
+  const pending = readManifest()
+    .filter((d) => d.schema && !d.embedding)
+    .map((d) => ({ id: d.id, name: d.name, schema: d.schema! }));
+  for (const d of pending) {
+    try {
+      const embedding = await embedText(datasetDocument(d.name, d.schema));
+      saveDatasetEmbedding(d.id, embedding);
+    } catch (err) {
+      // No Gemini key / embedding unavailable — dataset stays unranked, not
+      // excluded (see retrieval.ts). Logged because a silent failure here
+      // (e.g. a stale model name) would otherwise be invisible.
+      console.warn(`[embeddings] could not embed "${d.name}":`, err instanceof Error ? err.message : err);
     }
   }
 }
