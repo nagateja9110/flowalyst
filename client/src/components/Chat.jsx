@@ -59,6 +59,18 @@ function TraceCard({ step, index }) {
   );
 }
 
+// A narration line ("writing a query…", "that failed — correcting…") for the
+// gap before each LLM call, when there's otherwise nothing to show — the
+// completion APIs are single blocking round-trips, not token streams.
+function StatusLine({ text, active }) {
+  return (
+    <div className={`flex items-center gap-2 px-1 text-xs text-zinc-500 ${active ? "animate-pulse" : ""}`}>
+      <span className="text-zinc-600">›</span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
 function SqlBlock({ sql }) {
   const [open, setOpen] = useState(false);
   return (
@@ -92,9 +104,15 @@ function Message({ m }) {
       </div>
     );
   }
+  let queryIndex = -1;
   return (
     <div className="max-w-[95%] space-y-2">
-      {m.trace.map((s, i) => <TraceCard key={i} step={s} index={i} />)}
+      {m.trace.map((s, i) => {
+        const isLast = i === m.trace.length - 1;
+        if (s.kind === "status") return <StatusLine key={i} text={s.message} active={m.pending && isLast} />;
+        queryIndex += 1;
+        return <TraceCard key={i} step={s} index={queryIndex} />;
+      })}
       {m.text && <div className="whitespace-pre-wrap text-sm text-zinc-200">{m.text}</div>}
       {m.pending && !m.text && m.trace.length === 0 && (
         <div className="text-sm text-zinc-500 animate-pulse">thinking…</div>
@@ -162,10 +180,12 @@ export function Chat({ datasetId, hasApiKey }) {
         await ask(datasetId, question, history, (e) => {
           patchLast((m) => {
             switch (e.type) {
+              case "status":
+                return { ...m, trace: [...m.trace, { kind: "status", message: e.message }] };
               case "text":
                 return { ...m, text: m.text + e.delta };
               case "tool_call":
-                return { ...m, trace: [...m.trace, { sql: e.sql }] };
+                return { ...m, trace: [...m.trace, { kind: "query", sql: e.sql }] };
               case "tool_result": {
                 const trace = [...m.trace];
                 const last = trace[trace.length - 1];

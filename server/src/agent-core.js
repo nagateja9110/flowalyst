@@ -6,6 +6,7 @@ import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
  * render the self-correction loop live instead of only the final answer.
  * Both providers (Gemini, Groq) emit exactly this shape:
  *
+ *   { type: "status", message: string }
  *   { type: "text", delta: string }
  *   { type: "tool_call", sql: string }
  *   { type: "tool_result", ok: boolean, rowCount?: number, error?: string }
@@ -13,8 +14,23 @@ import { validateSql, withLimit, UnsafeSqlError } from "./guardrails.js";
  *   { type: "error", message: string }
  *   { type: "done" }
  *
+ * `status` narrates what's about to happen before each LLM call — the only
+ * points in the loop with no other visible signal, since both providers'
+ * completion calls are single blocking round-trips (no token streaming).
+ * Without it the client sees nothing between submit and the first tool call.
+ *
  * @typedef {Object} AgentEvent
  */
+
+/** What to tell the client is happening right before the next LLM call.
+ *  @param {number} iteration
+ *  @param {boolean} lastFailed Whether the most recent tool call (if any) errored.
+ *  @returns {string} */
+export function statusMessage(iteration, lastFailed) {
+  if (iteration === 0) return "Reading the question and writing a SQL query…";
+  if (lastFailed) return "That query failed — writing a corrected query…";
+  return "Reviewing the results — deciding on a follow-up query…";
+}
 
 /**
  * A prior exchange, provider-agnostic. Each agent rebuilds its own message

@@ -7,6 +7,7 @@ import {
   executeRunSql,
   historyAnswer,
   ResultTracker,
+  statusMessage,
 } from "./agent-core.js";
 import { geminiPool } from "./keypool.js";
 
@@ -62,9 +63,11 @@ export async function runGeminiAgent(sources, primaryPath, ws, question, history
     { role: "user", parts: [{ text: question }] },
   ];
   const tracker = new ResultTracker();
+  let lastFailed = false;
 
   for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
     if (opts.isAborted?.()) return; // client gone — stop before the next paid call
+    emit({ type: "status", message: statusMessage(iteration, lastFailed) });
     const response = await generateWithFailover({
       model: GEMINI_MODEL,
       contents,
@@ -99,12 +102,14 @@ export async function runGeminiAgent(sources, primaryPath, ws, question, history
     }
 
     const parts = [];
+    lastFailed = false;
     for (const call of calls) {
       const sql = String(call.args?.query ?? "");
       emit({ type: "tool_call", sql });
 
       const exec = await executeRunSql(sources, primaryPath, sql);
       if (exec.ok && exec.data) tracker.record(sql, exec.data);
+      else lastFailed = true;
       emit({ type: "tool_result", ok: exec.ok, rowCount: exec.rowCount, error: exec.error });
       parts.push({
         functionResponse: {
